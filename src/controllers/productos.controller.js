@@ -7,9 +7,9 @@ exports.listarPorNegocio = (req, res) => {
   const { id_negocio } = req.params;
 
   db.query(
-    `SELECT id_producto, nombre, precio, stock
+    `SELECT id_producto, nombre_producto, descripcion, precio, stock, foto
      FROM productos
-     WHERE id_negocio = ? AND estado = 1`,
+     WHERE negocio_id = ? AND estado = 1`,
     [id_negocio],
     (err, rows) => {
       if (err)
@@ -24,9 +24,17 @@ exports.listarMisProductos = (req, res) => {
   const id_usuario = req.user.id_usuario;
 
   db.query(
-    `SELECT p.id_producto, p.nombre, p.precio, p.stock
+    `SELECT 
+        p.id_producto,
+        p.nombre_producto,
+        p.descripcion,
+        p.tipo_venta,
+        p.precio,
+        p.unidad_medida,
+        p.stock,
+        p.foto
      FROM productos p
-     JOIN negocios n ON n.id_negocio = p.id_negocio
+     JOIN negocios n ON n.id_negocio = p.negocio_id
      WHERE n.id_usuario = ? AND p.estado = 1`,
     [id_usuario],
     (err, rows) => {
@@ -94,14 +102,37 @@ exports.crear = (req, res) => {
 exports.editar = (req, res) => {
   const { id_producto } = req.params;
   const id_usuario = req.user.id_usuario;
-  const { nombre, precio, stock } = req.body;
+
+  const {
+    nombre_producto,
+    descripcion,
+    tipo_venta,
+    precio,
+    unidad_medida,
+    stock
+  } = req.body;
 
   db.query(
     `UPDATE productos p
-     JOIN negocios n ON n.id_negocio = p.id_negocio
-     SET p.nombre = ?, p.precio = ?, p.stock = ?
+     JOIN negocios n ON n.id_negocio = p.negocio_id
+     SET 
+        p.nombre_producto = ?,
+        p.descripcion = ?,
+        p.tipo_venta = ?,
+        p.precio = ?,
+        p.unidad_medida = ?,
+        p.stock = ?
      WHERE p.id_producto = ? AND n.id_usuario = ?`,
-    [nombre, precio, stock, id_producto, id_usuario],
+    [
+      nombre_producto,
+      descripcion,
+      tipo_venta,
+      precio,
+      unidad_medida,
+      stock,
+      id_producto,
+      id_usuario
+    ],
     (err, result) => {
       if (err)
         return res.status(500).json({ ok: false, message: "Error al editar producto" });
