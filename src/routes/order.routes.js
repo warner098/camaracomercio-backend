@@ -6,7 +6,7 @@ const {
   pedidosPorNegocio
 } = require("../controllers/order.controller");
 
-const verifyToken = require("../middleware/auth");
+const verifyToken = require("../middlewares/auth");
 
 // cliente crea pedido
 router.post(
