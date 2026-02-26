@@ -20,29 +20,60 @@ exports.listarPorNegocio = (req, res) => {
   );
 };
 
+exports.listarMisProductos = (req, res) => {
+  const id_usuario = req.user.id_usuario;
+
+  db.query(
+    `SELECT p.id_producto, p.nombre, p.precio, p.stock
+     FROM productos p
+     JOIN negocios n ON n.id_negocio = p.id_negocio
+     WHERE n.id_usuario = ? AND p.estado = 1`,
+    [id_usuario],
+    (err, rows) => {
+      if (err)
+        return res.status(500).json({ ok: false, message: "Error al listar productos" });
+
+      res.json({ ok: true, data: rows });
+    }
+  );
+};
+
 // ======================
 // CREAR PRODUCTO
 // ======================
 exports.crear = (req, res) => {
-  const { nombre, precio, stock, id_negocio, id_categoria } = req.body;
+  const id_usuario = req.user.id_usuario;
+  const { nombre, precio, stock, id_categoria } = req.body;
 
-  if (!nombre || precio == null || !id_negocio) {
+  if (!nombre || precio == null) {
     return res.status(400).json({
       ok: false,
       message: "Datos incompletos"
     });
   }
 
+  // Obtener id_negocio desde el usuario autenticado
   db.query(
-    `INSERT INTO productos
-     (nombre, precio, stock, id_negocio, id_categoria)
-     VALUES (?, ?, ?, ?, ?)`,
-    [nombre, precio, stock || 0, id_negocio, id_categoria || null],
-    (err) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al crear producto" });
+    "SELECT id_negocio FROM negocios WHERE id_usuario = ?",
+    [id_usuario],
+    (err, result) => {
+      if (err || result.length === 0)
+        return res.status(403).json({ ok: false, message: "No autorizado" });
 
-      res.json({ ok: true, message: "Producto creado correctamente" });
+      const id_negocio = result[0].id_negocio;
+
+      db.query(
+        `INSERT INTO productos
+         (nombre, precio, stock, id_negocio, id_categoria)
+         VALUES (?, ?, ?, ?, ?)`,
+        [nombre, precio, stock || 0, id_negocio, id_categoria || null],
+        (err2) => {
+          if (err2)
+            return res.status(500).json({ ok: false, message: "Error al crear producto" });
+
+          res.json({ ok: true, message: "Producto creado correctamente" });
+        }
+      );
     }
   );
 };

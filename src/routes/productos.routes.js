@@ -11,6 +11,12 @@ router.get(
   productosController.listarPorNegocio
 );
 
+router.get(
+  "/mis-productos",
+  verifyToken(["negocio", "admin"]),
+  productosController.listarMisProductos
+);
+
 // protegido
 router.post(
   "/",
