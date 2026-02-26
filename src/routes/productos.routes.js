@@ -4,6 +4,7 @@ const router = express.Router();
 const productosController = require("../controllers/productos.controller");
 const verifyToken = require("../middlewares/auth");
 const authorizeNegocio = require("../middlewares/authorizeNegocio");
+const upload = require("../middlewares/upload");
 
 // público
 router.get(
@@ -22,6 +23,7 @@ router.post(
   "/",
   verifyToken(["negocio", "admin"]),
   authorizeNegocio,
+  upload.single("foto"),
   productosController.crear
 );
 

@@ -43,16 +43,17 @@ exports.listarMisProductos = (req, res) => {
 // ======================
 exports.crear = (req, res) => {
   const id_usuario = req.user.id_usuario;
-  const { nombre, precio, stock, id_categoria } = req.body;
+  const {
+    nombre_producto,
+    descripcion,
+    tipo_venta,
+    precio,
+    unidad_medida,
+    stock
+  } = req.body;
 
-  if (!nombre || precio == null) {
-    return res.status(400).json({
-      ok: false,
-      message: "Datos incompletos"
-    });
-  }
+  const foto = req.file?.path || null;
 
-  // Obtener id_negocio desde el usuario autenticado
   db.query(
     "SELECT id_negocio FROM negocios WHERE id_usuario = ?",
     [id_usuario],
@@ -60,13 +61,22 @@ exports.crear = (req, res) => {
       if (err || result.length === 0)
         return res.status(403).json({ ok: false, message: "No autorizado" });
 
-      const id_negocio = result[0].id_negocio;
+      const negocio_id = result[0].id_negocio;
 
       db.query(
         `INSERT INTO productos
-         (nombre, precio, stock, id_negocio, id_categoria)
-         VALUES (?, ?, ?, ?, ?)`,
-        [nombre, precio, stock || 0, id_negocio, id_categoria || null],
+        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          negocio_id,
+          nombre_producto,
+          descripcion,
+          tipo_venta,
+          precio,
+          unidad_medida,
+          stock || 0,
+          foto
+        ],
         (err2) => {
           if (err2)
             return res.status(500).json({ ok: false, message: "Error al crear producto" });
