@@ -9,5 +9,6 @@ app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/negocios", require("./routes/negocios.routes"));
 app.use("/api/productos", require("./routes/productos.routes"));
 app.use("/api/pedidos", require("./routes/pedidos.routes"));
+app.use("/api/orders", require("./routes/order.routes"));
 
 module.exports = app;
