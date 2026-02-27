@@ -7,13 +7,14 @@ exports.listarPorNegocio = (req, res) => {
   const { id_negocio } = req.params;
 
   db.query(
-    `SELECT id_producto, nombre_producto, descripcion, precio, stock, foto
-     FROM productos
-     WHERE negocio_id = ? AND estado = 1`,
+    `SELECT id, nombre_producto, descripcion, precio, stock, foto
+FROM productos
+WHERE negocio_id = ? AND estado = 1`,
     [id_negocio],
     (err, rows) => {
       if (err)
         return res.status(500).json({ ok: false, message: "Error al listar productos" });
+      
 
       res.json({ ok: true, data: rows });
     }
@@ -25,7 +26,7 @@ exports.listarMisProductos = (req, res) => {
 
   db.query(
     `SELECT 
-        p.id_producto,
+        p.id,
         p.nombre_producto,
         p.descripcion,
         p.tipo_venta,
@@ -34,12 +35,16 @@ exports.listarMisProductos = (req, res) => {
         p.stock,
         p.foto
      FROM productos p
-     JOIN negocios n ON n.id_negocio = p.negocio_id
-     WHERE n.id_usuario = ? AND p.estado = 1`,
+     JOIN negocios n ON n.id = p.negocio_id
+     WHERE n.usuario_id = ? 
+     AND p.estado = 1`,
     [id_usuario],
     (err, rows) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al listar productos" });
+
+      if (err) {
+        console.log("ERROR SQL:", err);
+        return res.status(500).json({ message: "Error SQL" });
+      }
 
       res.json({ ok: true, data: rows });
     }
@@ -50,7 +55,9 @@ exports.listarMisProductos = (req, res) => {
 // CREAR PRODUCTO
 // ======================
 exports.crear = (req, res) => {
+
   const id_usuario = req.user.id_usuario;
+
   const {
     nombre_producto,
     descripcion,
@@ -62,19 +69,28 @@ exports.crear = (req, res) => {
 
   const foto = req.file?.path || null;
 
+  // Primero buscamos el negocio del usuario
   db.query(
-    "SELECT id_negocio FROM negocios WHERE id_usuario = ?",
+    "SELECT id FROM negocios WHERE usuario_id = ?",
     [id_usuario],
-    (err, result) => {
-      if (err || result.length === 0)
-        return res.status(403).json({ ok: false, message: "No autorizado" });
+    (err, rows) => {
 
-      const negocio_id = result[0].id_negocio;
+      if (err) {
+        console.log(err);
+        return res.status(500).json({ ok: false, message: "Error servidor" });
+      }
 
+      if (rows.length === 0) {
+        return res.status(403).json({ ok: false, message: "No tiene negocio registrado" });
+      }
+
+      const negocio_id = rows[0].id;
+
+      // Ahora insertamos el producto
       db.query(
         `INSERT INTO productos
-        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           negocio_id,
           nombre_producto,
@@ -86,8 +102,11 @@ exports.crear = (req, res) => {
           foto
         ],
         (err2) => {
-          if (err2)
+
+          if (err2) {
+            console.log(err2);
             return res.status(500).json({ ok: false, message: "Error al crear producto" });
+          }
 
           res.json({ ok: true, message: "Producto creado correctamente" });
         }
@@ -114,7 +133,7 @@ exports.editar = (req, res) => {
 
   db.query(
     `UPDATE productos p
-     JOIN negocios n ON n.id_negocio = p.negocio_id
+     JOIN negocios n ON n.id = p.negocio_id
      SET 
         p.nombre_producto = ?,
         p.descripcion = ?,
@@ -122,7 +141,7 @@ exports.editar = (req, res) => {
         p.precio = ?,
         p.unidad_medida = ?,
         p.stock = ?
-     WHERE p.id_producto = ? AND n.id_usuario = ?`,
+     WHERE p.id = ? AND n.usuario_id = ?`,
     [
       nombre_producto,
       descripcion,
@@ -134,8 +153,10 @@ exports.editar = (req, res) => {
       id_usuario
     ],
     (err, result) => {
-      if (err)
+      if (err) {
+        console.log(err);
         return res.status(500).json({ ok: false, message: "Error al editar producto" });
+      }
 
       if (result.affectedRows === 0)
         return res.status(403).json({ ok: false, message: "No autorizado" });
@@ -154,13 +175,13 @@ exports.eliminar = (req, res) => {
 
   db.query(
     `UPDATE productos p
-     JOIN negocios n ON n.id_negocio = p.negocio_id
+     JOIN negocios n ON n.id = p.negocio_id
      SET p.estado = 0
-     WHERE p.id_producto = ? AND n.id_usuario = ?`,
+     WHERE p.id = ? AND n.usuario_id = ?`,
     [id_producto, id_usuario],
     (err, result) => {
       if (err) {
-        console.error(err); // 👈 agrega esto para ver errores en Render
+        console.log(err);
         return res.status(500).json({ ok: false, message: "Error al eliminar producto" });
       }
 
