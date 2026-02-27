@@ -5,7 +5,7 @@ const db = require("../config/db");
 // ======================
 exports.listar = (req, res) => {
   db.query(
-    "SELECT id_negocio, nombre, descripcion, direccion FROM negocios WHERE estado = 1",
+    "SELECT id, nombre_negocio, descripcion, ubicacion FROM negocios WHERE estado = 1",
     (err, rows) => {
       if (err)
         return res.status(500).json({ ok: false, message: "Error al listar negocios" });
@@ -22,7 +22,7 @@ exports.detalle = (req, res) => {
   const { id_negocio } = req.params;
 
   db.query(
-    "SELECT * FROM negocios WHERE id_negocio = ? AND estado = 1",
+    "SELECT * FROM negocios WHERE id = ? AND estado = 1",
     [id_negocio],
     (err, rows) => {
       if (err)
@@ -48,7 +48,7 @@ exports.crear = (req, res) => {
 
   db.query(
     `INSERT INTO negocios
-     (nombre, descripcion, direccion, telefono, id_usuario)
+     (nombre_negocio, descripcion, ubicacion, telefono, usuario_id)
      VALUES (?, ?, ?, ?, ?)`,
     [nombre, descripcion || null, direccion || null, telefono || null, id_usuario],
     (err) => {
@@ -70,8 +70,8 @@ exports.editar = (req, res) => {
 
   db.query(
     `UPDATE negocios 
-     SET nombre = ?, descripcion = ?, direccion = ?, telefono = ?
-     WHERE id_negocio = ? AND id_usuario = ?`,
+     SET nombre_negocio = ?, descripcion = ?, ubicacion = ?, telefono = ?
+     WHERE id = ? AND usuario_id = ?`,
     [nombre, descripcion, direccion, telefono, id_negocio, id_usuario],
     (err, result) => {
       if (err)
@@ -93,7 +93,7 @@ exports.eliminar = (req, res) => {
   const id_usuario = req.user.id_usuario;
 
   db.query(
-    "UPDATE negocios SET estado = 0 WHERE id_negocio = ? AND id_usuario = ?",
+    "UPDATE negocios SET estado = 0 WHERE id = ? AND usuario_id = ?",
     [id_negocio, id_usuario],
     (err, result) => {
       if (err)

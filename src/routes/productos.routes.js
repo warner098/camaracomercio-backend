@@ -13,27 +13,27 @@ router.get(
 
 router.get(
   "/mis-productos",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["cliente", "admin"]),
   productosController.listarMisProductos
 );
 
 // protegido
 router.post(
   "/",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["cliente", "admin"]),
   upload.single("foto"),
   productosController.crear
 );
 
 router.put(
   "/:id_producto",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["cliente", "admin"]),
   productosController.editar
 );
 
 router.delete(
   "/:id_producto",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["cliente", "admin"]),
   productosController.eliminar
 );
 

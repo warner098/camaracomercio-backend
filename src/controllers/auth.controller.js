@@ -6,11 +6,13 @@ const jwt = require("jsonwebtoken");
 // REGISTRO
 // =====================
 const registro = async (req, res) => {
-  const { nombre, email, password, rol } = req.body;
+  const { nombre, email, password } = req.body;
 
-  if (!nombre || !email || !password || !rol) {
-    return res.status(400).json({ ok: false, message: "Datos incompletos" });
-  }
+if (!nombre || !email || !password) {
+  return res.status(400).json({ ok: false, message: "Datos incompletos" });
+}
+
+const rol = "cliente";
 
   try {
     const hash = await bcrypt.hash(password, 10);

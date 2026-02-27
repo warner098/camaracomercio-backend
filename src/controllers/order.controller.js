@@ -3,14 +3,14 @@ const db = require("../config/db");
 // ============================
 // CREAR ORDEN (CLIENTE)
 // ============================
-const crearPedido = async (req, res) => {
+const crearOrden = async (req, res) => {
   const usuario_id = req.user.id_usuario;
   const { negocio_id, items } = req.body;
 
-  if (!negocio_id || !items || items.length === 0) {
+  if (!negocio_id || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({
       ok: false,
-      message: "Pedido inválido"
+      message: "Orden inválida"
     });
   }
 
@@ -19,24 +19,40 @@ const crearPedido = async (req, res) => {
   try {
     await connection.beginTransaction();
 
+    // Validar que el negocio exista
+    const [negocioRows] = await connection.query(
+      "SELECT id FROM negocios WHERE id = ?",
+      [negocio_id]
+    );
+
+    if (negocioRows.length === 0)
+      throw new Error("Negocio no existe");
+
     let total = 0;
 
-    // 1️⃣ Validar productos y calcular total
+    // Validar productos y calcular total
     for (const item of items) {
+
+      if (!item.producto_id || item.cantidad <= 0)
+        throw new Error("Cantidad inválida");
+
       const [rows] = await connection.query(
-        `SELECT precio FROM productos 
-         WHERE id = ? AND negocio_id = ?`,
+        `SELECT precio, stock 
+         FROM productos 
+         WHERE id = ? AND negocio_id = ? AND estado = 1`,
         [item.producto_id, negocio_id]
       );
 
-      if (rows.length === 0) {
-        throw new Error("Producto no encontrado");
-      }
+      if (rows.length === 0)
+        throw new Error("Producto no encontrado o inactivo");
+
+      if (rows[0].stock < item.cantidad)
+        throw new Error("Stock insuficiente");
 
       total += rows[0].precio * item.cantidad;
     }
 
-    // 2️⃣ Crear orden
+    // Crear orden
     const [ordenResult] = await connection.query(
       `INSERT INTO ordenes (usuario_id, negocio_id, total, estado)
        VALUES (?, ?, ?, 'pendiente')`,
@@ -45,7 +61,7 @@ const crearPedido = async (req, res) => {
 
     const orden_id = ordenResult.insertId;
 
-    // 3️⃣ Insertar detalle
+    // Insertar detalle y descontar stock
     for (const item of items) {
       const [[producto]] = await connection.query(
         "SELECT precio FROM productos WHERE id = ?",
@@ -66,13 +82,18 @@ const crearPedido = async (req, res) => {
           subtotal
         ]
       );
+
+      await connection.query(
+        "UPDATE productos SET stock = stock - ? WHERE id = ?",
+        [item.cantidad, item.producto_id]
+      );
     }
 
     await connection.commit();
 
     res.json({
       ok: true,
-      message: "Pedido creado correctamente",
+      message: "Orden creada correctamente",
       orden_id
     });
 
@@ -88,49 +109,125 @@ const crearPedido = async (req, res) => {
 };
 
 // ============================
-// ÓRDENES DEL NEGOCIO
+// ÓRDENES DEL CLIENTE
 // ============================
-const pedidosPorNegocio = (req, res) => {
+const ordenesCliente = (req, res) => {
   const usuario_id = req.user.id_usuario;
 
-  // 1️⃣ Obtener negocio del usuario
   db.query(
-    "SELECT id FROM negocios WHERE usuario_id = ?",
+    `SELECT id, total, estado, fecha_creacion
+     FROM ordenes
+     WHERE usuario_id = ?
+     ORDER BY fecha_creacion DESC`,
     [usuario_id],
-    (err, negocioRows) => {
-      if (err || negocioRows.length === 0) {
-        return res.status(403).json({
-          ok: false,
-          message: "Negocio no encontrado"
-        });
-      }
+    (err, rows) => {
+      if (err)
+        return res.status(500).json({ ok: false, message: "Error al listar órdenes" });
 
-      const negocio_id = negocioRows[0].id;
+      res.json({ ok: true, data: rows });
+    }
+  );
+};
 
-      // 2️⃣ Obtener órdenes
+// ============================
+// CAMBIAR ESTADO (DUEÑO NEGOCIO)
+// ============================
+const cambiarEstado = (req, res) => {
+  const { id_orden } = req.params;
+  const { estado } = req.body;
+  const usuario_id = req.user.id_usuario;
+
+  const estadosValidos = ["pendiente", "pagado", "cancelado"];
+
+  if (!estadosValidos.includes(estado))
+    return res.status(400).json({ ok: false, message: "Estado inválido" });
+
+  db.query(
+    `UPDATE ordenes o
+     JOIN negocios n ON n.id = o.negocio_id
+     SET o.estado = ?
+     WHERE o.id = ? AND n.usuario_id = ?`,
+    [estado, id_orden, usuario_id],
+    (err, result) => {
+      if (err)
+        return res.status(500).json({ ok: false, message: "Error al actualizar estado" });
+
+      if (result.affectedRows === 0)
+        return res.status(403).json({ ok: false, message: "No autorizado" });
+
+      res.json({ ok: true, message: "Estado actualizado" });
+    }
+  );
+};
+
+// ============================
+// ÓRDENES DEL NEGOCIO
+// ============================
+const ordenesNegocio = (req, res) => {
+  const usuario_id = req.user.id_usuario;
+
+  db.query(
+    `SELECT 
+       o.id,
+       o.total,
+       o.estado,
+       o.fecha_creacion,
+       u.nombre AS cliente
+     FROM ordenes o
+     JOIN negocios n ON n.id = o.negocio_id
+     JOIN usuarios u ON u.id = o.usuario_id
+     WHERE n.usuario_id = ?
+     ORDER BY o.fecha_creacion DESC`,
+    [usuario_id],
+    (err, rows) => {
+      if (err)
+        return res.status(500).json({ ok: false, message: "Error al obtener órdenes" });
+
+      res.json({
+        ok: true,
+        data: rows
+      });
+    }
+  );
+};
+
+// ============================
+// DETALLE ORDEN (CLIENTE)
+// ============================
+const detalleOrden = (req, res) => {
+  const { id_orden } = req.params;
+  const usuario_id = req.user.id_usuario;
+
+  db.query(
+    `SELECT o.id, o.total, o.estado, o.fecha_creacion,
+            u.nombre AS cliente,
+            n.nombre_negocio AS negocio
+     FROM ordenes o
+     JOIN usuarios u ON u.id = o.usuario_id
+     JOIN negocios n ON n.id = o.negocio_id
+     WHERE o.id = ? AND o.usuario_id = ?`,
+    [id_orden, usuario_id],
+    (err, ordenRows) => {
+      if (err)
+        return res.status(500).json({ ok: false, message: "Error al obtener orden" });
+
+      if (ordenRows.length === 0)
+        return res.status(404).json({ ok: false, message: "Orden no encontrada" });
+
       db.query(
-        `SELECT 
-           o.id AS orden_id,
-           o.total,
-           o.estado,
-           o.fecha_creacion,
-           u.nombre AS cliente
-         FROM ordenes o
-         JOIN usuarios u ON u.id = o.usuario_id
-         WHERE o.negocio_id = ?
-         ORDER BY o.fecha_creacion DESC`,
-        [negocio_id],
-        (err2, rows) => {
-          if (err2) {
-            return res.status(500).json({
-              ok: false,
-              message: "Error al obtener pedidos"
-            });
-          }
+        `SELECT p.nombre_producto, d.cantidad, d.precio_unitario, d.subtotal
+         FROM detalle_orden d
+         JOIN productos p ON p.id = d.producto_id
+         WHERE d.orden_id = ?`,
+        [id_orden],
+        (err2, detalleRows) => {
+          if (err2)
+            return res.status(500).json({ ok: false, message: "Error al obtener detalle" });
 
           res.json({
             ok: true,
-            pedidos: rows
+            orden: ordenRows[0],
+            detalle: detalleRows
           });
         }
       );
@@ -139,6 +236,9 @@ const pedidosPorNegocio = (req, res) => {
 };
 
 module.exports = {
-  crearPedido,
-  pedidosPorNegocio
+  crearOrden,
+  ordenesCliente,
+  ordenesNegocio,
+  cambiarEstado,
+  detalleOrden
 };
