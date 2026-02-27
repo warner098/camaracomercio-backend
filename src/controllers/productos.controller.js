@@ -154,13 +154,15 @@ exports.eliminar = (req, res) => {
 
   db.query(
     `UPDATE productos p
-     JOIN negocios n ON n.id_negocio = p.id_negocio
+     JOIN negocios n ON n.id_negocio = p.negocio_id
      SET p.estado = 0
      WHERE p.id_producto = ? AND n.id_usuario = ?`,
     [id_producto, id_usuario],
     (err, result) => {
-      if (err)
+      if (err) {
+        console.error(err); // 👈 agrega esto para ver errores en Render
         return res.status(500).json({ ok: false, message: "Error al eliminar producto" });
+      }
 
       if (result.affectedRows === 0)
         return res.status(403).json({ ok: false, message: "No autorizado" });
