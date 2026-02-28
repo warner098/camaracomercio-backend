@@ -6,6 +6,8 @@ const verifyToken = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
 
 // público
+router.get("/", productosController.listarTodos);
+
 router.get(
   "/negocio/:id_negocio",
   productosController.listarPorNegocio

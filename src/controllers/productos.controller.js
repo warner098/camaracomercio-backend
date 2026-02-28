@@ -3,6 +3,22 @@ const db = require("../config/db");
 // ======================
 // LISTAR PRODUCTOS (PÚBLICO)
 // ======================
+
+exports.listarTodos = async (req, res) => {
+  try {
+    const [productos] = await pool.query(`
+      SELECT p.*, n.nombre AS negocio_nombre
+      FROM productos p
+      JOIN negocios n ON p.id_negocio = n.id_negocio
+    `);
+
+    res.json(productos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener productos" });
+  }
+};
+
 exports.listarPorNegocio = (req, res) => {
   const { id_negocio } = req.params;
 
