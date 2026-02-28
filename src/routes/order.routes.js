@@ -31,13 +31,13 @@ router.get(
 // ==========================
 router.get(
   "/negocio",
-  verifyToken(["cliente", "admin"]), // ajusta luego cuando tengas rol negocio real
+  verifyToken(["negocio", "admin"]), // ajusta luego cuando tengas rol negocio real
   ordenesNegocio
 );
 
 router.put(
   "/:id_orden/estado",
-  verifyToken(["cliente", "admin"]),
+  verifyToken(["negocio", "admin"]),
   cambiarEstado
 );
 
@@ -46,7 +46,7 @@ router.put(
 // ==========================
 router.get(
   "/:id_orden",
-  verifyToken(["cliente", "admin"]),
+  verifyToken(["negocio", "admin"]),
   detalleOrden
 );
 

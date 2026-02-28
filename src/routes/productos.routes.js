@@ -13,29 +13,29 @@ router.get(
   productosController.listarPorNegocio
 );
 
+// SOLO NEGOCIO Y ADMIN
 router.get(
   "/mis-productos",
-  verifyToken(["cliente", "admin"]),
+  verifyToken(["negocio", "admin"]),
   productosController.listarMisProductos
 );
 
-// protegido
 router.post(
   "/",
-  verifyToken(["cliente", "admin"]),
+  verifyToken(["negocio", "admin"]),
   upload.single("foto"),
   productosController.crear
 );
 
 router.put(
   "/:id_producto",
-  verifyToken(["cliente", "admin"]),
+  verifyToken(["negocio", "admin"]),
   productosController.editar
 );
 
 router.delete(
   "/:id_producto",
-  verifyToken(["cliente", "admin"]),
+  verifyToken(["negocio", "admin"]),
   productosController.eliminar
 );
 

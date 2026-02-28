@@ -1,0 +1,28 @@
+const express = require("express");
+const router = express.Router();
+
+const controller = require("../controllers/solicitudes.controller");
+const verifyToken = require("../middlewares/auth");
+
+// Cliente envía solicitud
+router.post(
+  "/",
+  verifyToken(["cliente"]),
+  controller.crearSolicitud
+);
+
+// Admin lista
+router.get(
+  "/",
+  verifyToken(["admin"]),
+  controller.listarSolicitudes
+);
+
+// Admin aprueba/rechaza
+router.put(
+  "/:id_solicitud",
+  verifyToken(["admin"]),
+  controller.cambiarEstado
+);
+
+module.exports = router;
