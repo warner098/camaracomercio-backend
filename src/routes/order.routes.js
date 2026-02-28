@@ -46,7 +46,7 @@ router.put(
 // ==========================
 router.get(
   "/:id_orden",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["cliente", "negocio", "admin"]),
   detalleOrden
 );
 

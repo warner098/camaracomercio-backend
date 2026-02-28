@@ -258,58 +258,51 @@ const ordenesNegocio = (req, res) => {
 // DETALLE ORDEN (CLIENTE)
 // ============================
 const detalleOrden = async (req, res) => {
-  const { id_orden } = req.params;
-  const usuario_id = req.user.id_usuario;
-  const rol = req.user.rol;
+  try {
+    const { id_orden } = req.params;
+    const user = req.user;
 
-  let query = `
-    SELECT o.*, u.nombre AS cliente, n.nombre_negocio
-    FROM ordenes o
-    JOIN usuarios u ON u.id = o.usuario_id
-    JOIN negocios n ON n.id = o.negocio_id
-    WHERE o.id = ?
-  `;
+    const [ordenRows] = await db.query(
+      `SELECT o.*, 
+              u.nombre AS cliente_nombre,
+              n.nombre_negocio AS negocio_nombre,
+              n.usuario_id AS negocio_dueno
+       FROM ordenes o
+       JOIN usuarios u ON u.id = o.usuario_id
+       JOIN negocios n ON n.id = o.negocio_id
+       WHERE o.id = ?`,
+      [id_orden]
+    );
 
-  let params = [id_orden];
+    if (!ordenRows.length)
+      return res.status(404).json({ ok: false, message: "Orden no encontrada" });
 
-  if (rol === "cliente") {
-    query += " AND o.usuario_id = ?";
-    params.push(usuario_id);
-  }
+    const orden = ordenRows[0];
 
-  if (rol === "negocio") {
-    query += " AND n.usuario_id = ?";
-    params.push(usuario_id);
-  }
+    // 🔐 Permisos
+    if (user.rol === "cliente" && orden.usuario_id !== user.id_usuario)
+      return res.status(403).json({ ok: false, message: "No autorizado" });
 
-  db.query(query, params, (err, ordenRows) => {
+    if (user.rol === "negocio" && orden.negocio_dueno !== user.id_usuario)
+      return res.status(403).json({ ok: false, message: "No autorizado" });
 
-    if (err)
-      return res.status(500).json({ ok: false, message: "Error al obtener orden" });
-
-    if (ordenRows.length === 0)
-      return res.status(404).json({ ok: false, message: "No autorizado o no existe" });
-
-    db.query(
-      `SELECT p.nombre_producto, d.cantidad, d.peso,
-              d.precio_unitario, d.subtotal
+    const [detalle] = await db.query(
+      `SELECT d.*, p.nombre_producto, p.foto
        FROM detalle_orden d
        JOIN productos p ON p.id = d.producto_id
        WHERE d.orden_id = ?`,
-      [id_orden],
-      (err2, detalleRows) => {
-
-        if (err2)
-          return res.status(500).json({ ok: false, message: "Error al obtener detalle" });
-
-        res.json({
-          ok: true,
-          orden: ordenRows[0],
-          detalle: detalleRows
-        });
-      }
+      [id_orden]
     );
-  });
+
+    res.json({
+      ok: true,
+      orden,
+      productos: detalle
+    });
+
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
 };
 
 module.exports = {
