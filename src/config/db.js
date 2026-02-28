@@ -11,13 +11,15 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
-pool.getConnection((err, connection) => {
-  if (err) {
-    console.error("❌ Error conexión BD:", err.message);
-  } else {
+// Verificación correcta con async
+(async () => {
+  try {
+    const connection = await pool.getConnection();
     console.log("✅ BD conectada correctamente");
     connection.release();
+  } catch (error) {
+    console.error("❌ Error conexión BD:", error.message);
   }
-});
+})();
 
 module.exports = pool;
