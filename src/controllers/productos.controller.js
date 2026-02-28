@@ -1,15 +1,13 @@
-const db = require("../config/db");
-
-// ======================
+const pool = require("../config/db");
 // LISTAR PRODUCTOS (PÚBLICO)
 // ======================
 
 exports.listarTodos = async (req, res) => {
   try {
     const [productos] = await pool.query(`
-      SELECT p.*, n.nombre AS negocio_nombre
+      SELECT p.*, n.nombre_negocio AS negocio_nombre
       FROM productos p
-      JOIN negocios n ON p.id_negocio = n.id_negocio
+      JOIN negocios n ON p.negocio_id = n.id
     `);
 
     res.json(productos);
@@ -19,52 +17,50 @@ exports.listarTodos = async (req, res) => {
   }
 };
 
-exports.listarPorNegocio = (req, res) => {
-  const { id_negocio } = req.params;
+exports.listarPorNegocio = async (req, res) => {
+  try {
+    const { id_negocio } = req.params;
 
-  db.query(
-    `SELECT id, nombre_producto, descripcion, precio, stock, foto
-FROM productos
-WHERE negocio_id = ? AND estado = 1`,
-    [id_negocio],
-    (err, rows) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al listar productos" });
-      
+    const [rows] = await pool.query(
+      `SELECT id, nombre_producto, descripcion, precio, stock, foto
+       FROM productos
+       WHERE negocio_id = ? AND estado = 1`,
+      [id_negocio]
+    );
 
-      res.json({ ok: true, data: rows });
-    }
-  );
+    res.json(rows);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Error al listar productos" });
+  }
 };
 
-exports.listarMisProductos = (req, res) => {
-  const id_usuario = req.user.id_usuario;
+exports.listarMisProductos = async (req, res) => {
+  try {
+    const id_usuario = req.user.id_usuario;
 
-  db.query(
-    `SELECT 
-        p.id,
-        p.nombre_producto,
-        p.descripcion,
-        p.tipo_venta,
-        p.precio,
-        p.unidad_medida,
-        p.stock,
-        p.foto
-     FROM productos p
-     JOIN negocios n ON n.id = p.negocio_id
-     WHERE n.usuario_id = ? 
-     AND p.estado = 1`,
-    [id_usuario],
-    (err, rows) => {
+    const [rows] = await pool.query(
+      `SELECT 
+          p.id,
+          p.nombre_producto,
+          p.descripcion,
+          p.tipo_venta,
+          p.precio,
+          p.unidad_medida,
+          p.stock,
+          p.foto
+       FROM productos p
+       JOIN negocios n ON n.id = p.negocio_id
+       WHERE n.usuario_id = ? 
+       AND p.estado = 1`,
+      [id_usuario]
+    );
 
-      if (err) {
-        console.log("ERROR SQL:", err);
-        return res.status(500).json({ message: "Error SQL" });
-      }
-
-      res.json({ ok: true, data: rows });
-    }
-  );
+    res.json(rows);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Error SQL" });
+  }
 };
 
 // ======================
