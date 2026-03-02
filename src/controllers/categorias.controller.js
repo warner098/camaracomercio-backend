@@ -3,78 +3,129 @@ const db = require("../config/db");
 // ======================
 // LISTAR CATEGORÍAS
 // ======================
-exports.listar = (req, res) => {
-  db.query(
-    "SELECT id_categoria, nombre FROM categorias WHERE estado = 1",
-    (err, rows) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al listar categorías" });
+exports.listar = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id_categoria, nombre FROM categorias WHERE estado = 1"
+    );
 
-      res.json({ ok: true, data: rows });
-    }
-  );
+    return res.json({
+      ok: true,
+      data: rows,
+    });
+
+  } catch (error) {
+    console.error("ERROR LISTAR CATEGORIAS:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al listar categorías",
+    });
+  }
 };
 
 // ======================
 // CREAR
 // ======================
-exports.crear = (req, res) => {
-  const { nombre } = req.body;
+exports.crear = async (req, res) => {
+  try {
+    const { nombre } = req.body;
 
-  if (!nombre)
-    return res.status(400).json({ ok: false, message: "Nombre requerido" });
-
-  db.query(
-    "INSERT INTO categorias (nombre) VALUES (?)",
-    [nombre],
-    (err) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al crear categoría" });
-
-      res.json({ ok: true, message: "Categoría creada" });
+    if (!nombre) {
+      return res.status(400).json({
+        ok: false,
+        message: "Nombre requerido",
+      });
     }
-  );
+
+    await db.query(
+      "INSERT INTO categorias (nombre, estado) VALUES (?, 1)",
+      [nombre]
+    );
+
+    return res.status(201).json({
+      ok: true,
+      message: "Categoría creada",
+    });
+
+  } catch (error) {
+    console.error("ERROR CREAR CATEGORIA:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al crear categoría",
+    });
+  }
 };
 
 // ======================
 // EDITAR
 // ======================
-exports.editar = (req, res) => {
-  const { id_categoria } = req.params;
-  const { nombre } = req.body;
+exports.editar = async (req, res) => {
+  try {
+    const { id_categoria } = req.params;
+    const { nombre } = req.body;
 
-  db.query(
-    "UPDATE categorias SET nombre = ? WHERE id_categoria = ?",
-    [nombre, id_categoria],
-    (err, result) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al editar categoría" });
-
-      if (result.affectedRows === 0)
-        return res.status(404).json({ ok: false, message: "Categoría no encontrada" });
-
-      res.json({ ok: true, message: "Categoría actualizada" });
+    if (!nombre) {
+      return res.status(400).json({
+        ok: false,
+        message: "Nombre requerido",
+      });
     }
-  );
+
+    const [result] = await db.query(
+      "UPDATE categorias SET nombre = ? WHERE id_categoria = ?",
+      [nombre, id_categoria]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        ok: false,
+        message: "Categoría no encontrada",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "Categoría actualizada",
+    });
+
+  } catch (error) {
+    console.error("ERROR EDITAR CATEGORIA:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al editar categoría",
+    });
+  }
 };
 
 // ======================
-// ELIMINAR (SOFT)
+// ELIMINAR (SOFT DELETE)
 // ======================
-exports.eliminar = (req, res) => {
-  const { id_categoria } = req.params;
+exports.eliminar = async (req, res) => {
+  try {
+    const { id_categoria } = req.params;
 
-  db.query(
-    "UPDATE categorias SET estado = 0 WHERE id_categoria = ?",
-    [id_categoria],
-    (err, result) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al eliminar categoría" });
+    const [result] = await db.query(
+      "UPDATE categorias SET estado = 0 WHERE id_categoria = ?",
+      [id_categoria]
+    );
 
-      if (result.affectedRows === 0)
-        return res.status(404).json({ ok: false, message: "Categoría no encontrada" });
-
-      res.json({ ok: true, message: "Categoría eliminada" });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        ok: false,
+        message: "Categoría no encontrada",
+      });
     }
-  );
+
+    return res.json({
+      ok: true,
+      message: "Categoría eliminada",
+    });
+
+  } catch (error) {
+    console.error("ERROR ELIMINAR CATEGORIA:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al eliminar categoría",
+    });
+  }
 };

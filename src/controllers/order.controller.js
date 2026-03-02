@@ -174,84 +174,113 @@ const crearOrden = async (req, res) => {
 // ============================
 // ÓRDENES DEL CLIENTE
 // ============================
-const ordenesCliente = (req, res) => {
-  const usuario_id = req.user.id_usuario;
+const ordenesCliente = async (req, res) => {
+  try {
+    const usuario_id = req.user.id_usuario;
 
-  db.query(
-    `SELECT id, total, estado, fecha_creacion
-     FROM ordenes
-     WHERE usuario_id = ?
-     ORDER BY fecha_creacion DESC`,
-    [usuario_id],
-    (err, rows) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al listar órdenes" });
+    const [rows] = await db.query(
+      `SELECT id, total, estado, fecha_creacion
+       FROM ordenes
+       WHERE usuario_id = ?
+       ORDER BY fecha_creacion DESC`,
+      [usuario_id]
+    );
 
-      res.json({ ok: true, data: rows });
-    }
-  );
+    return res.json({
+      ok: true,
+      data: rows
+    });
+
+  } catch (error) {
+    console.error("ERROR ORDENES CLIENTE:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al listar órdenes"
+    });
+  }
 };
 
 // ============================
 // CAMBIAR ESTADO (DUEÑO NEGOCIO)
 // ============================
-const cambiarEstado = (req, res) => {
-  const { id_orden } = req.params;
-  const { estado } = req.body;
-  const usuario_id = req.user.id_usuario;
+const cambiarEstado = async (req, res) => {
+  try {
+    const { id_orden } = req.params;
+    const { estado } = req.body;
+    const usuario_id = req.user.id_usuario;
 
-  const estadosValidos = ["pendiente", "pagado", "cancelado"];
+    const estadosValidos = ["pendiente", "pagado", "cancelado"];
 
-  if (!estadosValidos.includes(estado))
-    return res.status(400).json({ ok: false, message: "Estado inválido" });
-
-  db.query(
-    `UPDATE ordenes o
-     JOIN negocios n ON n.id = o.negocio_id
-     SET o.estado = ?
-     WHERE o.id = ? AND n.usuario_id = ?`,
-    [estado, id_orden, usuario_id],
-    (err, result) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al actualizar estado" });
-
-      if (result.affectedRows === 0)
-        return res.status(403).json({ ok: false, message: "No autorizado" });
-
-      res.json({ ok: true, message: "Estado actualizado" });
+    if (!estadosValidos.includes(estado)) {
+      return res.status(400).json({
+        ok: false,
+        message: "Estado inválido"
+      });
     }
-  );
+
+    const [result] = await db.query(
+      `UPDATE ordenes o
+       JOIN negocios n ON n.id = o.negocio_id
+       SET o.estado = ?
+       WHERE o.id = ? AND n.usuario_id = ?`,
+      [estado, id_orden, usuario_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(403).json({
+        ok: false,
+        message: "No autorizado"
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "Estado actualizado"
+    });
+
+  } catch (error) {
+    console.error("ERROR CAMBIAR ESTADO:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al actualizar estado"
+    });
+  }
 };
 
 // ============================
 // ÓRDENES DEL NEGOCIO
 // ============================
-const ordenesNegocio = (req, res) => {
-  const usuario_id = req.user.id_usuario;
+const ordenesNegocio = async (req, res) => {
+  try {
+    const usuario_id = req.user.id_usuario;
 
-  db.query(
-    `SELECT 
-       o.id,
-       o.total,
-       o.estado,
-       o.fecha_creacion,
-       u.nombre AS cliente
-     FROM ordenes o
-     JOIN negocios n ON n.id = o.negocio_id
-     JOIN usuarios u ON u.id = o.usuario_id
-     WHERE n.usuario_id = ?
-     ORDER BY o.fecha_creacion DESC`,
-    [usuario_id],
-    (err, rows) => {
-      if (err)
-        return res.status(500).json({ ok: false, message: "Error al obtener órdenes" });
+    const [rows] = await db.query(
+      `SELECT 
+         o.id,
+         o.total,
+         o.estado,
+         o.fecha_creacion,
+         u.nombre AS cliente
+       FROM ordenes o
+       JOIN negocios n ON n.id = o.negocio_id
+       JOIN usuarios u ON u.id = o.usuario_id
+       WHERE n.usuario_id = ?
+       ORDER BY o.fecha_creacion DESC`,
+      [usuario_id]
+    );
 
-      res.json({
-        ok: true,
-        data: rows
-      });
-    }
-  );
+    return res.json({
+      ok: true,
+      data: rows
+    });
+
+  } catch (error) {
+    console.error("ERROR ORDENES NEGOCIO:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener órdenes"
+    });
+  }
 };
 
 // ============================

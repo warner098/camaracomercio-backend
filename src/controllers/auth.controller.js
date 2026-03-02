@@ -6,37 +6,50 @@ const jwt = require("jsonwebtoken");
 // REGISTRO
 // =====================
 const registro = async (req, res) => {
-  const { nombre, email, password } = req.body;
-
-if (!nombre || !email || !password) {
-  return res.status(400).json({ ok: false, message: "Datos incompletos" });
-}
-
-const rol = "cliente";
-
   try {
+    const { nombre, email, password } = req.body;
+
+    if (!nombre || !email || !password) {
+      return res.status(400).json({
+        ok: false,
+        message: "Datos incompletos",
+      });
+    }
+
+    const rol = "cliente";
+
+    // Verificar si ya existe
+    const [existe] = await db.query(
+      "SELECT id FROM usuarios WHERE correo = ?",
+      [email]
+    );
+
+    if (existe.length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "El correo ya está registrado",
+      });
+    }
+
     const hash = await bcrypt.hash(password, 10);
 
-    db.query(
+    await db.query(
       `INSERT INTO usuarios (nombre, correo, contrasena, rol)
        VALUES (?, ?, ?, ?)`,
-      [nombre, email, hash, rol],
-      (err) => {
-        if (err) {
-          return res.status(500).json({
-            ok: false,
-            message: "Error al registrar usuario"
-          });
-        }
-
-        res.json({
-          ok: true,
-          message: "Usuario registrado correctamente"
-        });
-      }
+      [nombre, email, hash, rol]
     );
+
+    return res.status(201).json({
+      ok: true,
+      message: "Usuario registrado correctamente",
+    });
+
   } catch (error) {
-    res.status(500).json({ ok: false, message: "Error de servidor" });
+    console.error("ERROR REGISTRO:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error de servidor",
+    });
   }
 };
 
@@ -44,20 +57,26 @@ const rol = "cliente";
 // LOGIN
 // =====================
 const login = async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ ok: false, message: "Datos incompletos" });
-  }
-
   try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        ok: false,
+        message: "Datos incompletos",
+      });
+    }
+
     const [rows] = await db.query(
       "SELECT * FROM usuarios WHERE correo = ?",
       [email]
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ ok: false, message: "Credenciales inválidas" });
+      return res.status(401).json({
+        ok: false,
+        message: "Credenciales inválidas",
+      });
     }
 
     const user = rows[0];
@@ -65,7 +84,10 @@ const login = async (req, res) => {
     const valid = await bcrypt.compare(password, user.contrasena);
 
     if (!valid) {
-      return res.status(401).json({ ok: false, message: "Credenciales inválidas" });
+      return res.status(401).json({
+        ok: false,
+        message: "Credenciales inválidas",
+      });
     }
 
     const token = jwt.sign(
@@ -74,23 +96,26 @@ const login = async (req, res) => {
       { expiresIn: "8h" }
     );
 
-    res.json({
+    return res.json({
       ok: true,
       token,
       user: {
         id_usuario: user.id,
         nombre: user.nombre,
-        rol: user.rol
-      }
+        rol: user.rol,
+      },
     });
 
-  } catch (err) {
-    console.error("ERROR LOGIN:", err);
-    res.status(500).json({ ok: false, message: err.message });
+  } catch (error) {
+    console.error("ERROR LOGIN:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error de servidor",
+    });
   }
 };
 
 module.exports = {
   registro,
-  login
+  login,
 };
