@@ -6,7 +6,7 @@ const db = require("../config/db");
 exports.listar = async (req, res) => {
   try {
     const [rows] = await db.query(
-      "SELECT id, nombre_negocio, descripcion, ubicacion FROM negocios WHERE estado = 1"
+      "SELECT id, nombre_negocio, descripcion, categoria, foto, ubicacion FROM negocios WHERE estado = 1"
     );
 
     return res.json({
@@ -94,6 +94,36 @@ exports.crear = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al crear negocio",
+    });
+  }
+};
+
+exports.miNegocio = async (req, res) => {
+  try {
+
+    const usuario_id = req.user.id_usuario;
+
+    const [rows] = await db.query(
+      "SELECT * FROM negocios WHERE usuario_id = ? AND estado = 1",
+      [usuario_id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        ok: false,
+        message: "Negocio no encontrado"
+      });
+    }
+
+    res.json({
+      ok: true,
+      data: rows[0]
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      ok:false,
+      message:"Error servidor"
     });
   }
 };

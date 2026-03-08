@@ -7,10 +7,19 @@ const pool = require("../config/db");
 exports.listarTodos = async (req, res) => {
   try {
     const [productos] = await pool.query(`
-      SELECT p.*, n.nombre_negocio AS negocio_nombre
-      FROM productos p
-      JOIN negocios n ON p.negocio_id = n.id
-      WHERE p.estado = 1
+      SELECT
+p.id,
+p.nombre_producto,
+p.descripcion,
+p.precio,
+p.stock,
+p.foto,
+p.tipo_venta,
+p.unidad_medida,
+n.nombre_negocio
+FROM productos p
+JOIN negocios n ON p.negocio_id = n.id
+WHERE p.estado = 1
     `);
 
     return res.json({ ok: true, data: productos });
@@ -26,7 +35,15 @@ exports.listarPorNegocio = async (req, res) => {
     const { id_negocio } = req.params;
 
     const [rows] = await pool.query(
-      `SELECT id, nombre_producto, descripcion, precio, stock, foto
+      `SELECT
+      id,
+      nombre_producto,
+      descripcion,
+      precio,
+      stock,
+      foto,
+      tipo_venta,
+      unidad_medida
        FROM productos
        WHERE negocio_id = ? AND estado = 1`,
       [id_negocio]
@@ -89,7 +106,7 @@ exports.crear = async (req, res) => {
     const foto = req.file?.path || null;
 
     const [negocioRows] = await pool.query(
-      "SELECT id FROM negocios WHERE usuario_id = ?",
+      "SELECT id FROM negocios WHERE usuario_id = ? AND estado = 1",
       [id_usuario]
     );
 
@@ -102,7 +119,7 @@ exports.crear = async (req, res) => {
 
     const negocio_id = negocioRows[0].id;
 
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO productos
        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto, estado)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
@@ -119,9 +136,10 @@ exports.crear = async (req, res) => {
     );
 
     return res.status(201).json({
-      ok: true,
-      message: "Producto creado correctamente"
-    });
+  ok: true,
+  message: "Producto creado correctamente",
+  id_producto: result.insertId
+});
 
   } catch (error) {
     console.error("ERROR CREAR PRODUCTO:", error);
@@ -159,8 +177,8 @@ exports.editar = async (req, res) => {
           p.tipo_venta = ?,
           p.precio = ?,
           p.unidad_medida = ?,
-          p.stock = ?
-       WHERE p.id = ? AND n.usuario_id = ?`,
+          p.stock = ? 
+       WHERE p.id = ? AND n.usuario_id = ? AND p.estado = 1`,
       [
         nombre_producto,
         descripcion,

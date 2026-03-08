@@ -6,6 +6,13 @@ const verifyToken = require("../middlewares/auth");
 
 // público
 router.get("/", negociosController.listar);
+
+router.get(
+  "/mi-negocio",
+  verifyToken(["negocio", "admin"]),
+  negociosController.miNegocio
+);
+
 router.get("/:id_negocio", negociosController.detalle);
 
 // protegido
