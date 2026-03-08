@@ -42,7 +42,7 @@ exports.crearSolicitud = async (req, res) => {
 exports.listarSolicitudes = async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT s.*, u.nombre, u.correo
+      `SELECT s.*, u.nombre, u.correo, u.rol
        FROM solicitudes_negocio s
        JOIN usuarios u ON u.id = s.usuario_id
        ORDER BY s.fecha_creacion DESC`
