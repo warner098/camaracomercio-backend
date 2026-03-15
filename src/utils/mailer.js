@@ -8,7 +8,7 @@ const enviarVerificacion = async (email, link) => {
     console.log("Enviando correo con Resend a:", email);
 
     await resend.emails.send({
-  from: "Cámara de Comercio <eeeeeq40@gmail.com>",
+  from: "Cámara de Comercio <onboarding@resend.dev>",
   to: email,
   subject: "Verifica tu cuenta",
   html: `
