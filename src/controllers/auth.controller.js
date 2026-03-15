@@ -43,12 +43,14 @@ const registro = async (req, res) => {
 
     const link = `${process.env.FRONTEND_URL}/verificar/${tokenVerificacion}`;
 
-    await enviarVerificacion(email, link);
+enviarVerificacion(email, link)
+  .then(() => console.log("Correo enviado"))
+  .catch(err => console.error("Error enviando correo:", err));
 
-    return res.status(201).json({
-      ok: true,
-      message: "Registro exitoso. Revisa tu correo para activar tu cuenta.",
-    });
+return res.status(201).json({
+  ok: true,
+  message: "Registro exitoso. Revisa tu correo para activar tu cuenta.",
+});
 
   } catch (error) {
     console.error("ERROR REGISTRO:", error);
