@@ -41,7 +41,7 @@ const registro = async (req, res) => {
       [nombre, email, hash, rol, tokenVerificacion]
     );
 
-    const link = `${process.env.FRONTEND_URL}/verificar/${tokenVerificacion}`;
+    const link = `https://vinculacion-ird6.onrender.com/api/auth/verificar/${tokenVerificacion}`;
 
 enviarVerificacion(email, link)
   .then(() => console.log("Correo enviado"))
@@ -151,7 +151,7 @@ const verificarCuenta = async (req, res) => {
     [token]
   );
 
-  res.send("Cuenta verificada correctamente");
+  res.redirect(`${process.env.FRONTEND_URL}/verificado`);
 };
 
 module.exports = {
