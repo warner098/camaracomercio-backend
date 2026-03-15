@@ -3,8 +3,6 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const enviarVerificacion = require("../utils/mailer");
-
-await enviarVerificacion(email, link);
 // =====================
 // REGISTRO
 // =====================
