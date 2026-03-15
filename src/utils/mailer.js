@@ -23,7 +23,7 @@ const enviarVerificacion = async (email, link) => {
 
     sendSmtpEmail.sender = {
       name: "Cámara de Comercio Jipijapa",
-      email: "eeeeeq40@gmail.com"
+      email: "8al1es@gmail.com"
     };
 
     sendSmtpEmail.to = [
