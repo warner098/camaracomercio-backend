@@ -1,30 +1,14 @@
-const nodemailer = require("nodemailer");
-const dns = require("dns");
+const { Resend } = require("resend");
 
-dns.setDefaultResultOrder("ipv4first");
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const enviarVerificacion = async (email, link) => {
-
   try {
 
-    console.log("Intentando enviar correo a:", email);
-    console.log("Link:", link);
+    console.log("Enviando correo con Resend a:", email);
 
-    const info = await transporter.sendMail({
-      from: `"Cámara de Comercio - Jipijapa" <${process.env.EMAIL_USER}>`,
+    await resend.emails.send({
+      from: "onboarding@resend.dev",
       to: email,
       subject: "Verifica tu cuenta",
       html: `
@@ -34,14 +18,13 @@ const enviarVerificacion = async (email, link) => {
       `
     });
 
-    console.log("Correo enviado:", info.messageId);
+    console.log("Correo enviado correctamente");
 
   } catch (error) {
 
-    console.error("ERROR MAIL:", error);
+    console.error("Error enviando correo:", error);
 
   }
-
 };
 
 module.exports = enviarVerificacion;
