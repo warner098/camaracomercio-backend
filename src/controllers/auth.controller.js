@@ -1,7 +1,10 @@
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const enviarVerificacion = require("../utils/mailer");
 
+await enviarVerificacion(email, link);
 // =====================
 // REGISTRO
 // =====================
@@ -18,7 +21,6 @@ const registro = async (req, res) => {
 
     const rol = "cliente";
 
-    // Verificar si ya existe
     const [existe] = await db.query(
       "SELECT id FROM usuarios WHERE correo = ?",
       [email]
@@ -33,15 +35,21 @@ const registro = async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
 
+    const tokenVerificacion = crypto.randomBytes(32).toString("hex");
+
     await db.query(
-      `INSERT INTO usuarios (nombre, correo, contrasena, rol)
-       VALUES (?, ?, ?, ?)`,
-      [nombre, email, hash, rol]
+      `INSERT INTO usuarios (nombre, correo, contrasena, rol, token_verificacion)
+       VALUES (?, ?, ?, ?, ?)`,
+      [nombre, email, hash, rol, tokenVerificacion]
     );
+
+    const link = `${process.env.FRONTEND_URL}/verificar/${tokenVerificacion}`;
+
+    await enviarVerificacion(email, link);
 
     return res.status(201).json({
       ok: true,
-      message: "Usuario registrado correctamente",
+      message: "Registro exitoso. Revisa tu correo para activar tu cuenta.",
     });
 
   } catch (error) {
@@ -81,6 +89,13 @@ const login = async (req, res) => {
 
     const user = rows[0];
 
+    if (!user.verificado) {
+  return res.status(401).json({
+    ok: false,
+    message: "Debes verificar tu correo antes de iniciar sesión"
+  });
+}
+
     const valid = await bcrypt.compare(password, user.contrasena);
 
     if (!valid) {
@@ -115,7 +130,32 @@ const login = async (req, res) => {
   }
 };
 
+const verificarCuenta = async (req, res) => {
+
+  const { token } = req.params;
+
+  const [rows] = await db.query(
+    "SELECT id FROM usuarios WHERE token_verificacion = ?",
+    [token]
+  );
+
+  if (rows.length === 0) {
+    return res.status(400).send("Token inválido");
+  }
+
+  await db.query(
+    `UPDATE usuarios
+     SET verificado = TRUE,
+     token_verificacion = NULL
+     WHERE token_verificacion = ?`,
+    [token]
+  );
+
+  res.send("Cuenta verificada correctamente");
+};
+
 module.exports = {
   registro,
   login,
+  verificarCuenta
 };
