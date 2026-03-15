@@ -41,7 +41,7 @@ const registro = async (req, res) => {
       [nombre, email, hash, rol, tokenVerificacion]
     );
 
-    const link = `https://vinculacion-ird6.onrender.com/api/auth/verificar/${tokenVerificacion}`;
+    const link = `${process.env.FRONTEND_URL}/verificar?token=${tokenVerificacion}`;
 
 enviarVerificacion(email, link)
   .then(() => console.log("Correo enviado"))
@@ -59,6 +59,44 @@ return res.status(201).json({
       message: "Error de servidor",
     });
   }
+};
+
+const verificarCuenta = async (req, res) => {
+
+  const { token } = req.body;
+
+  if (!token) {
+  return res.status(400).json({
+    ok:false,
+    message:"Token requerido"
+  });
+}
+
+  const [rows] = await db.query(
+    "SELECT id FROM usuarios WHERE token_verificacion = ?",
+    [token]
+  );
+
+  if (rows.length === 0) {
+    return res.status(400).json({
+      ok:false,
+      message:"Token inválido"
+    });
+  }
+
+  await db.query(
+    `UPDATE usuarios
+     SET verificado = TRUE,
+     token_verificacion = NULL
+     WHERE token_verificacion = ?`,
+    [token]
+  );
+
+  res.json({
+    ok:true,
+    message:"Cuenta verificada"
+  });
+
 };
 
 // =====================
@@ -130,29 +168,6 @@ const login = async (req, res) => {
   }
 };
 
-const verificarCuenta = async (req, res) => {
-
-  const { token } = req.params;
-
-  const [rows] = await db.query(
-    "SELECT id FROM usuarios WHERE token_verificacion = ?",
-    [token]
-  );
-
-  if (rows.length === 0) {
-    return res.status(400).send("Token inválido");
-  }
-
-  await db.query(
-    `UPDATE usuarios
-     SET verificado = TRUE,
-     token_verificacion = NULL
-     WHERE token_verificacion = ?`,
-    [token]
-  );
-
-  res.redirect(`${process.env.FRONTEND_URL}/verificado`);
-};
 
 module.exports = {
   registro,
