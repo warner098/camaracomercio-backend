@@ -4,6 +4,9 @@ const db = require("../config/db");
 // CLIENTE ENVÍA SOLICITUD
 // ==========================
 exports.crearSolicitud = async (req, res) => {
+
+  const connection = await db.getConnection();
+
   try {
 
     const usuario_id = req.user.id_usuario;
@@ -13,14 +16,15 @@ exports.crearSolicitud = async (req, res) => {
       descripcion,
       categoria,
       ubicacion,
-      telefono
+      telefono,
+      categorias
     } = req.body;
 
     // ==========================
     // VALIDACIONES
     // ==========================
 
-    if (!nombre_negocio || !categoria || !ubicacion || !telefono) {
+    if (!nombre_negocio || !ubicacion || !telefono) {
       return res.status(400).json({
         ok: false,
         message: "Complete todos los campos obligatorios"
@@ -41,11 +45,25 @@ exports.crearSolicitud = async (req, res) => {
       });
     }
 
+    if (!Array.isArray(categorias) || categorias.length === 0) {
+      return res.status(400).json({
+        ok:false,
+        message:"Seleccione al menos una categoría"
+      });
+    }
+
+    if (categorias.length > 5) {
+      return res.status(400).json({
+        ok:false,
+        message:"Máximo 5 categorías"
+      });
+    }
+
     // ==========================
     // VERIFICAR NEGOCIO EXISTENTE
     // ==========================
 
-    const [negocio] = await db.query(
+    const [negocio] = await connection.query(
       "SELECT id FROM negocios WHERE usuario_id = ?",
       [usuario_id]
     );
@@ -61,7 +79,7 @@ exports.crearSolicitud = async (req, res) => {
     // VERIFICAR SOLICITUD PENDIENTE
     // ==========================
 
-    const [solicitud] = await db.query(
+    const [solicitud] = await connection.query(
       `SELECT id 
        FROM solicitudes_negocio
        WHERE usuario_id = ? AND estado = 'pendiente'`,
@@ -79,7 +97,9 @@ exports.crearSolicitud = async (req, res) => {
     // CREAR SOLICITUD
     // ==========================
 
-    await db.query(
+    const categoriaPrincipal = categorias[0]; // solo para mantener compatibilidad
+
+    const [result] = await connection.query(
       `INSERT INTO solicitudes_negocio
        (usuario_id, nombre_negocio, descripcion, categoria, ubicacion, telefono, estado)
        VALUES (?, ?, ?, ?, ?, ?, 'pendiente')`,
@@ -87,11 +107,28 @@ exports.crearSolicitud = async (req, res) => {
         usuario_id,
         nombre_negocio,
         descripcion,
-        categoria,
+        categoriaPrincipal,
         ubicacion,
         telefono
       ]
     );
+
+    const solicitudId = result.insertId;
+
+    // ==========================
+    // GUARDAR RELACIÓN CATEGORÍAS
+    // ==========================
+
+    for (const cat of categorias) {
+
+      await connection.query(
+        `INSERT INTO solicitud_categorias
+         (solicitud_id, categoria_id)
+         VALUES (?, ?)`,
+        [solicitudId, cat]
+      );
+
+    }
 
     return res.status(201).json({
       ok: true,
@@ -107,7 +144,10 @@ exports.crearSolicitud = async (req, res) => {
       message: "Error al enviar solicitud"
     });
 
+  } finally {
+    connection.release();
   }
+
 };
 
 exports.obtenerCategorias = async (req, res) => {
