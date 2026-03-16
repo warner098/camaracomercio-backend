@@ -110,6 +110,30 @@ exports.crearSolicitud = async (req, res) => {
   }
 };
 
+exports.obtenerCategorias = async (req, res) => {
+
+  try {
+
+    const [rows] = await db.query(
+      "SELECT id_categoria, nombre FROM categorias WHERE estado = 1"
+    );
+
+    return res.json({
+      ok: true,
+      data: rows
+    });
+
+  } catch (error) {
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener categorías"
+    });
+
+  }
+
+};
+
 // ==========================
 // ADMIN LISTA SOLICITUDES
 // ==========================

@@ -11,6 +11,8 @@ router.post(
   controller.crearSolicitud
 );
 
+router.get("/categorias", controller.obtenerCategorias);
+
 // Admin lista
 router.get(
   "/",
