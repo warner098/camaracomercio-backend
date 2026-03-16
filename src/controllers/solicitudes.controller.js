@@ -5,21 +5,92 @@ const db = require("../config/db");
 // ==========================
 exports.crearSolicitud = async (req, res) => {
   try {
-    const usuario_id = req.user.id_usuario;
-    const { nombre_negocio, descripcion, categoria, ubicacion, telefono } = req.body;
 
-    if (!nombre_negocio) {
+    const usuario_id = req.user.id_usuario;
+
+    const {
+      nombre_negocio,
+      descripcion,
+      categoria,
+      ubicacion,
+      telefono
+    } = req.body;
+
+    // ==========================
+    // VALIDACIONES
+    // ==========================
+
+    if (!nombre_negocio || !categoria || !ubicacion || !telefono) {
       return res.status(400).json({
         ok: false,
-        message: "Nombre requerido"
+        message: "Complete todos los campos obligatorios"
       });
     }
+
+    if (nombre_negocio.length < 3) {
+      return res.status(400).json({
+        ok: false,
+        message: "Nombre del negocio muy corto"
+      });
+    }
+
+    if (telefono.length < 7) {
+      return res.status(400).json({
+        ok: false,
+        message: "Teléfono no válido"
+      });
+    }
+
+    // ==========================
+    // VERIFICAR NEGOCIO EXISTENTE
+    // ==========================
+
+    const [negocio] = await db.query(
+      "SELECT id FROM negocios WHERE usuario_id = ?",
+      [usuario_id]
+    );
+
+    if (negocio.length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Ya tienes un negocio registrado"
+      });
+    }
+
+    // ==========================
+    // VERIFICAR SOLICITUD PENDIENTE
+    // ==========================
+
+    const [solicitud] = await db.query(
+      `SELECT id 
+       FROM solicitudes_negocio
+       WHERE usuario_id = ? AND estado = 'pendiente'`,
+      [usuario_id]
+    );
+
+    if (solicitud.length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Ya tienes una solicitud pendiente"
+      });
+    }
+
+    // ==========================
+    // CREAR SOLICITUD
+    // ==========================
 
     await db.query(
       `INSERT INTO solicitudes_negocio
        (usuario_id, nombre_negocio, descripcion, categoria, ubicacion, telefono, estado)
        VALUES (?, ?, ?, ?, ?, ?, 'pendiente')`,
-      [usuario_id, nombre_negocio, descripcion, categoria, ubicacion, telefono]
+      [
+        usuario_id,
+        nombre_negocio,
+        descripcion,
+        categoria,
+        ubicacion,
+        telefono
+      ]
     );
 
     return res.status(201).json({
@@ -28,11 +99,14 @@ exports.crearSolicitud = async (req, res) => {
     });
 
   } catch (error) {
+
     console.error("ERROR CREAR SOLICITUD:", error);
+
     return res.status(500).json({
       ok: false,
       message: "Error al enviar solicitud"
     });
+
   }
 };
 
