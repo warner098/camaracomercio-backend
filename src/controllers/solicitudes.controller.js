@@ -220,9 +220,12 @@ exports.cambiarEstado = async (req, res) => {
     await connection.beginTransaction();
 
     const [rows] = await connection.query(
-      "SELECT * FROM solicitudes_negocio WHERE id = ?",
-      [id_solicitud]
-    );
+  `SELECT s.*, u.nombre AS dueno, u.correo AS email
+   FROM solicitudes_negocio s
+   JOIN usuarios u ON u.id = s.usuario_id
+   WHERE s.id = ?`,
+  [id_solicitud]
+);
 
     if (rows.length === 0) {
       throw new Error("Solicitud no encontrada");
@@ -243,15 +246,29 @@ exports.cambiarEstado = async (req, res) => {
 
       await connection.query(
         `INSERT INTO negocios
-         (usuario_id, nombre_negocio, descripcion, categoria, ubicacion, telefono, estado)
-         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+          (
+            usuario_id,
+            nombre_negocio,
+            descripcion,
+            categoria,
+            ubicacion,
+            telefono,
+            dueno,
+            email_contacto,
+            estado
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         [
-          solicitud.usuario_id,
-          solicitud.nombre_negocio,
-          solicitud.descripcion,
-          solicitud.categoria,
-          solicitud.ubicacion,
-          solicitud.telefono
+          [
+            solicitud.usuario_id,
+            solicitud.nombre_negocio,
+            solicitud.descripcion,
+            solicitud.categoria,
+            solicitud.ubicacion,
+            solicitud.telefono,
+            solicitud.dueno,
+            solicitud.email
+          ]
         ]
       );
     }
