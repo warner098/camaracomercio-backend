@@ -36,6 +36,7 @@ router.put(
 router.delete(
   "/:id_producto",
   verifyToken(["negocio", "admin"]),
+  upload.single("foto"),
   productosController.eliminar
 );
 

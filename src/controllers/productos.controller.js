@@ -168,28 +168,43 @@ exports.editar = async (req, res) => {
       stock
     } = req.body;
 
-    const [result] = await pool.query(
-      `UPDATE productos p
-       JOIN negocios n ON n.id = p.negocio_id
-       SET 
-          p.nombre_producto = ?,
-          p.descripcion = ?,
-          p.tipo_venta = ?,
-          p.precio = ?,
-          p.unidad_medida = ?,
-          p.stock = ? 
-       WHERE p.id = ? AND n.usuario_id = ? AND p.estado = 1`,
-      [
-        nombre_producto,
-        descripcion,
-        tipo_venta,
-        precio,
-        unidad_medida,
-        stock,
-        id_producto,
-        id_usuario
-      ]
-    );
+    const foto = req.file?.path;
+
+    // 🧠 QUERY BASE
+    let query = `
+      UPDATE productos p
+      JOIN negocios n ON n.id = p.negocio_id
+      SET 
+        p.nombre_producto = ?,
+        p.descripcion = ?,
+        p.tipo_venta = ?,
+        p.precio = ?,
+        p.unidad_medida = ?,
+        p.stock = ?
+    `;
+
+    const params = [
+      nombre_producto,
+      descripcion,
+      tipo_venta,
+      precio,
+      unidad_medida,
+      stock
+    ];
+
+    // 🔥 SI VIENE IMAGEN → SE AGREGA
+    if (foto) {
+      query += `, p.foto = ?`;
+      params.push(foto);
+    }
+
+    query += `
+      WHERE p.id = ? AND n.usuario_id = ? AND p.estado = 1
+    `;
+
+    params.push(id_producto, id_usuario);
+
+    const [result] = await pool.query(query, params);
 
     if (result.affectedRows === 0) {
       return res.status(403).json({
