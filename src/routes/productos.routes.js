@@ -30,6 +30,7 @@ router.post(
 router.put(
   "/:id_producto",
   verifyToken(["negocio", "admin"]),
+  upload.single("foto"), 
   productosController.editar
 );
 
