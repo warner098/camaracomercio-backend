@@ -13,6 +13,7 @@ app.use("/api/negocios", require("./routes/negocios.routes"));
 app.use("/api/productos", require("./routes/productos.routes"));
 app.use("/api/orders", require("./routes/order.routes"));
 app.use("/api/solicitudes", require("./routes/solicitudes.routes"));
+app.use("/api/pagos", require("./routes/pagos.routes"));
 
 // Ruta base de prueba
 app.get("/", (req, res) => {

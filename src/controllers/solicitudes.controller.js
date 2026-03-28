@@ -4,11 +4,9 @@ const db = require("../config/db");
 // CLIENTE ENVÍA SOLICITUD
 // ==========================
 exports.crearSolicitud = async (req, res) => {
-
   const connection = await db.getConnection();
 
   try {
-
     const usuario_id = req.user.id_usuario;
 
     const {
@@ -17,7 +15,7 @@ exports.crearSolicitud = async (req, res) => {
       categoria,
       ubicacion,
       telefono,
-      categorias
+      categorias,
     } = req.body;
 
     // ==========================
@@ -27,35 +25,35 @@ exports.crearSolicitud = async (req, res) => {
     if (!nombre_negocio || !ubicacion || !telefono) {
       return res.status(400).json({
         ok: false,
-        message: "Complete todos los campos obligatorios"
+        message: "Complete todos los campos obligatorios",
       });
     }
 
     if (nombre_negocio.length < 3) {
       return res.status(400).json({
         ok: false,
-        message: "Nombre del negocio muy corto"
+        message: "Nombre del negocio muy corto",
       });
     }
 
     if (telefono.length < 7) {
       return res.status(400).json({
         ok: false,
-        message: "Teléfono no válido"
+        message: "Teléfono no válido",
       });
     }
 
     if (!Array.isArray(categorias) || categorias.length === 0) {
       return res.status(400).json({
-        ok:false,
-        message:"Seleccione al menos una categoría"
+        ok: false,
+        message: "Seleccione al menos una categoría",
       });
     }
 
     if (categorias.length > 5) {
       return res.status(400).json({
-        ok:false,
-        message:"Máximo 5 categorías"
+        ok: false,
+        message: "Máximo 5 categorías",
       });
     }
 
@@ -65,13 +63,13 @@ exports.crearSolicitud = async (req, res) => {
 
     const [negocio] = await connection.query(
       "SELECT id FROM negocios WHERE usuario_id = ?",
-      [usuario_id]
+      [usuario_id],
     );
 
     if (negocio.length > 0) {
       return res.status(400).json({
         ok: false,
-        message: "Ya tienes un negocio registrado"
+        message: "Ya tienes un negocio registrado",
       });
     }
 
@@ -83,13 +81,13 @@ exports.crearSolicitud = async (req, res) => {
       `SELECT id 
        FROM solicitudes_negocio
        WHERE usuario_id = ? AND estado = 'pendiente'`,
-      [usuario_id]
+      [usuario_id],
     );
 
     if (solicitud.length > 0) {
       return res.status(400).json({
         ok: false,
-        message: "Ya tienes una solicitud pendiente"
+        message: "Ya tienes una solicitud pendiente",
       });
     }
 
@@ -109,8 +107,8 @@ exports.crearSolicitud = async (req, res) => {
         descripcion,
         categoriaPrincipal,
         ubicacion,
-        telefono
-      ]
+        telefono,
+      ],
     );
 
     const solicitudId = result.insertId;
@@ -120,58 +118,46 @@ exports.crearSolicitud = async (req, res) => {
     // ==========================
 
     for (const cat of categorias) {
-
       await connection.query(
         `INSERT INTO solicitud_categorias
          (solicitud_id, categoria_id)
          VALUES (?, ?)`,
-        [solicitudId, cat]
+        [solicitudId, cat],
       );
-
     }
 
     return res.status(201).json({
       ok: true,
-      message: "Solicitud enviada correctamente"
+      message: "Solicitud enviada correctamente",
     });
-
   } catch (error) {
-
     console.error("ERROR CREAR SOLICITUD:", error);
 
     return res.status(500).json({
       ok: false,
-      message: "Error al enviar solicitud"
+      message: "Error al enviar solicitud",
     });
-
   } finally {
     connection.release();
   }
-
 };
 
 exports.obtenerCategorias = async (req, res) => {
-
   try {
-
     const [rows] = await db.query(
-      "SELECT id_categoria, nombre FROM categorias WHERE estado = 1"
+      "SELECT id_categoria, nombre FROM categorias WHERE estado = 1",
     );
 
     return res.json({
       ok: true,
-      data: rows
+      data: rows,
     });
-
   } catch (error) {
-
     return res.status(500).json({
       ok: false,
-      message: "Error al obtener categorías"
+      message: "Error al obtener categorías",
     });
-
   }
-
 };
 
 // ==========================
@@ -183,19 +169,18 @@ exports.listarSolicitudes = async (req, res) => {
       `SELECT s.*, u.nombre, u.correo, u.rol
        FROM solicitudes_negocio s
        JOIN usuarios u ON u.id = s.usuario_id
-       ORDER BY s.fecha_creacion DESC`
+       ORDER BY s.fecha_creacion DESC`,
     );
 
     return res.json({
       ok: true,
-      data: rows
+      data: rows,
     });
-
   } catch (error) {
     console.error("ERROR LISTAR SOLICITUDES:", error);
     return res.status(500).json({
       ok: false,
-      message: "Error al listar solicitudes"
+      message: "Error al listar solicitudes",
     });
   }
 };
@@ -213,19 +198,19 @@ exports.cambiarEstado = async (req, res) => {
     if (!["aprobado", "rechazado"].includes(estado)) {
       return res.status(400).json({
         ok: false,
-        message: "Estado inválido"
+        message: "Estado inválido",
       });
     }
 
     await connection.beginTransaction();
 
     const [rows] = await connection.query(
-  `SELECT s.*, u.nombre AS dueno, u.correo AS email
+      `SELECT s.*, u.nombre AS dueno, u.correo AS email
    FROM solicitudes_negocio s
    JOIN usuarios u ON u.id = s.usuario_id
    WHERE s.id = ?`,
-  [id_solicitud]
-);
+      [id_solicitud],
+    );
 
     if (rows.length === 0) {
       throw new Error("Solicitud no encontrada");
@@ -235,13 +220,13 @@ exports.cambiarEstado = async (req, res) => {
 
     await connection.query(
       "UPDATE solicitudes_negocio SET estado = ? WHERE id = ?",
-      [estado, id_solicitud]
+      [estado, id_solicitud],
     );
 
     if (estado === "aprobado") {
       await connection.query(
         "UPDATE usuarios SET rol = 'negocio' WHERE id = ?",
-        [solicitud.usuario_id]
+        [solicitud.usuario_id],
       );
 
       await connection.query(
@@ -259,17 +244,15 @@ exports.cambiarEstado = async (req, res) => {
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         [
-          [
-            solicitud.usuario_id,
-            solicitud.nombre_negocio,
-            solicitud.descripcion,
-            solicitud.categoria,
-            solicitud.ubicacion,
-            solicitud.telefono,
-            solicitud.dueno,
-            solicitud.email
-          ]
-        ]
+          solicitud.usuario_id,
+          solicitud.nombre_negocio,
+          solicitud.descripcion,
+          solicitud.categoria,
+          solicitud.ubicacion,
+          solicitud.telefono,
+          solicitud.dueno,
+          solicitud.email,
+        ],
       );
     }
 
@@ -277,18 +260,16 @@ exports.cambiarEstado = async (req, res) => {
 
     return res.json({
       ok: true,
-      message: "Solicitud actualizada"
+      message: "Solicitud actualizada",
     });
-
   } catch (error) {
     await connection.rollback();
     console.error("ERROR CAMBIAR ESTADO SOLICITUD:", error);
 
     return res.status(500).json({
       ok: false,
-      message: error.message
+      message: error.message,
     });
-
   } finally {
     connection.release();
   }
