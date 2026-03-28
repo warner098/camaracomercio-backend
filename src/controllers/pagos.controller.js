@@ -53,27 +53,29 @@ exports.linkPayphone = async (req, res) => {
 // ==========================
 exports.linkKushki = async (req, res) => {
   try {
-    const { id_orden, total } = req.body;
+    const { id_orden, total, negocio_id } = req.body;
 
-    // Llamada a la API de Kushki Smartlink
+    const [rows] = await db.query("SELECT kushki_merchant_id FROM negocios WHERE id = ?", [negocio_id]);
+    if (!rows[0] || !rows[0].kushki_merchant_id) {
+        return res.status(400).json({ ok: false, message: "El negocio no configuró Kushki" });
+    }
+
     const response = await axios.post(
-      "https://api-stg.kushkipagos.com/smartlink/v1/links", // Usa la URL de producción cuando estés listo
+      "https://api-stg.kushkipagos.com/smartlink/v1/links", 
       {
-        amount: { subtotalIva0: total, subtotalIva: 0, iva: 0 },
+        amount: { subtotalIva0: parseFloat(total), subtotalIva: 0, iva: 0 },
         currency: "USD",
         description: `Orden #${id_orden}`,
         reference: id_orden.toString(),
-        returnUrl: `${process.env.FRONTEND_URL}/pago-exitoso`
+        returnUrl: `${process.env.FRONTEND_URL}/#/pago-finalizado`
       },
-      {
-        headers: { "Private-Merchant-Id": process.env.KUSHKI_PRIVATE_KEY }
-      }
+      { headers: { "Private-Merchant-Id": rows[0].kushki_merchant_id } }
     );
 
     return res.json({ ok: true, url: response.data.url });
   } catch (error) {
-    console.error("Error Kushki:", error);
-    return res.status(500).json({ ok: false, message: "Error generando link de Kushki" });
+    console.error("Error Kushki:", error.response?.data || error.message);
+    return res.status(500).json({ ok: false, message: "Error en Kushki" });
   }
 };
 

@@ -202,19 +202,16 @@ exports.eliminar = async (req, res) => {
 exports.actualizarConfigPago = async (req, res) => {
   try {
     const { id_negocio } = req.params;
-    const { payphone_id } = req.body;
+    const { payphone_id, kushki_merchant_id } = req.body;
     const usuario_id = req.user.id_usuario;
 
     const [result] = await db.query(
-      "UPDATE negocios SET payphone_id = ? WHERE id = ? AND usuario_id = ?",
-      [payphone_id, id_negocio, usuario_id]
+      "UPDATE negocios SET payphone_id = ?, kushki_merchant_id = ? WHERE id = ? AND usuario_id = ?",
+      [payphone_id, kushki_merchant_id, id_negocio, usuario_id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(403).json({ ok: false, message: "No autorizado" });
-    }
-
-    res.json({ ok: true, message: "Configuración de pago actualizada" });
+    if (result.affectedRows === 0) return res.status(403).json({ ok: false, message: "No autorizado" });
+    res.json({ ok: true, message: "Configuración actualizada" });
   } catch (error) {
     res.status(500).json({ ok: false, message: "Error al actualizar" });
   }
