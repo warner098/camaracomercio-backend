@@ -39,7 +39,8 @@ exports.linkPayphone = async (req, res) => {
 
     return res.json({ ok: true, url: response.data.paymentUrl });
   } catch (error) {
-    // ... error handling
+    console.error("Error en Payphone:", error.response?.data || error.message);
+    return res.status(500).json({ ok: false, message: "Error interno al generar pago" });
   }
 };
 
