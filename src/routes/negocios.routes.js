@@ -34,4 +34,10 @@ router.delete(
   negociosController.eliminar
 );
 
+router.put(
+  "/:id_negocio/config-pago",
+  verifyToken(["negocio", "admin"]),
+  negociosController.actualizarConfigPago
+);
+
 module.exports = router;
