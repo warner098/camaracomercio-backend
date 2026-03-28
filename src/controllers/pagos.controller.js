@@ -6,20 +6,21 @@ const axios = require("axios");
 // ==========================
 // 1. GENERAR LINK PAYPHONE
 // ==========================
+
 exports.linkPayphone = async (req, res) => {
   try {
     const { id_orden, total, negocio_id } = req.body;
 
-    // 1. Buscamos el ID de PayPhone del negocio específico
+    // 1. Buscamos el Store ID del negocio
     const [rows] = await db.query("SELECT payphone_id FROM negocios WHERE id = ?", [negocio_id]);
     
     if (!rows[0] || !rows[0].payphone_id) {
-        return res.status(400).json({ ok: false, message: "El negocio no tiene configurados sus pagos" });
+        return res.status(400).json({ ok: false, message: "El negocio no tiene configurado su Store ID de PayPhone" });
     }
 
     const payphoneIdNegocio = rows[0].payphone_id;
 
-    // 2. Generamos el cobro para ESE negocio
+    // 2. Generamos el cobro
     const response = await axios.post(
       "https://pay.payphonetodoesposible.com/api/button/Prepare",
       {
@@ -27,20 +28,23 @@ exports.linkPayphone = async (req, res) => {
         amountWithoutTax: Math.round(total * 100),
         currency: "USD",
         clientTransactionId: id_orden.toString(),
-        // AQUÍ ES DONDE SUCEDE LA MAGIA:
         storeId: payphoneIdNegocio, 
-        responseUrl: `${process.env.FRONTEND_URL}/pago-exitoso`,
-        cancellationUrl: `${process.env.FRONTEND_URL}/pago-cancelado`
+        responseUrl: `${process.env.FRONTEND_URL}/#/pago-finalizado`,
+        cancellationUrl: `${process.env.FRONTEND_URL}/#/pago-finalizado`
       },
       {
         headers: { Authorization: `Bearer ${process.env.PAYPHONE_TOKEN}` }
       }
     );
 
-    return res.json({ ok: true, url: response.data.paymentUrl });
+    // 🔥 EL CAMBIO ESTÁ AQUÍ 🔥
+    // Usamos payWithCard en lugar de paymentUrl
+    return res.json({ ok: true, url: response.data.payWithCard });
+
   } catch (error) {
-    console.error("Error en Payphone:", error.response?.data || error.message);
-    return res.status(500).json({ ok: false, message: "Error interno al generar pago" });
+    const detalleError = error.response?.data?.message || error.message;
+    console.error("Error en Payphone:", detalleError);
+    return res.status(500).json({ ok: false, message: `PayPhone dice: ${detalleError}` });
   }
 };
 
