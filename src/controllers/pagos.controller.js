@@ -1,7 +1,7 @@
 // ARCHIVO: controllers/pagos.controller.js
 
 const db = require("../config/db");
-const axios = require("axios"); // Asegúrate de ejecutar: npm install axios
+const axios = require("axios"); 
 
 // ==========================
 // 1. GENERAR LINK PAYPHONE
