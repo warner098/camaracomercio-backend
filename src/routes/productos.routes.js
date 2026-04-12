@@ -37,12 +37,6 @@ router.put(
 router.delete(
   "/:id_producto",
   verifyToken(["negocio", "admin"]),
-<<<<<<< HEAD
-  upload.single("foto"),
-  productosController.eliminar
-);
-
-=======
   productosController.eliminar
 );
 
@@ -52,5 +46,4 @@ router.put(
   productosController.activar
 );
 
->>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 module.exports = router;
