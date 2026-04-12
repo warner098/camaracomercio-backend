@@ -222,13 +222,14 @@ const ordenesNegocio = async (req, res) => {
 };
 
 // ============================
-// DETALLE ORDEN (MODIFICADO)
+// DETALLE ORDEN (MODIFICADO Y SEGURO)
 // ============================
 const detalleOrden = async (req, res) => {
   try {
     const { id_orden } = req.params;
-    const user = req.user;
+    const user = req.user; 
 
+    // 1. Buscamos la orden con los datos del dueño del negocio
     const [ordenRows] = await db.query(
       `SELECT o.*, 
               u.nombre AS cliente_nombre,
@@ -241,20 +242,32 @@ const detalleOrden = async (req, res) => {
       [id_orden]
     );
 
-    if (!ordenRows.length)
+    if (!ordenRows.length) {
       return res.status(404).json({ ok: false, message: "Orden no encontrada" });
+    }
 
     const orden = ordenRows[0];
 
-    // 🔐 LÓGICA DE PERMISOS:
-    const esDuenoVendedor = orden.negocio_dueno === user.id_usuario;
-    const esComprador = orden.usuario_id === user.id_usuario;
+    // 🔐 VALIDACIÓN DE SEGURIDAD ULTRA ESTRICTA
+    // Sacamos el ID del usuario del token (revisa si en tu verifyToken usas .id o .id_usuario)
+    const userIdPeticion = Number(user.id_usuario || user.id); 
+    const idDuenoNegocio = Number(orden.negocio_dueno);
+    const idComprador = Number(orden.usuario_id);
+
+    const esDuenoVendedor = idDuenoNegocio === userIdPeticion;
+    const esComprador = idComprador === userIdPeticion;
     const esAdmin = user.rol === "admin";
 
+    // Si NO es el que vende, ni el que compra, ni admin -> BLOQUEO TOTAL
     if (!esDuenoVendedor && !esComprador && !esAdmin) {
-      return res.status(403).json({ ok: false, message: "No autorizado para ver esta orden" });
+      console.log(`⚠️ Intento de acceso no autorizado a Orden #${id_orden} por Usuario ${userIdPeticion}`);
+      return res.status(403).json({ 
+        ok: false, 
+        message: "Acceso denegado: Esta orden no pertenece a tu negocio." 
+      });
     }
 
+    // Si pasó el muro, buscamos los productos
     const [detalle] = await db.query(
       `SELECT d.*, p.nombre_producto, p.foto
        FROM detalle_orden d
@@ -263,14 +276,15 @@ const detalleOrden = async (req, res) => {
       [id_orden]
     );
 
-    res.json({
+    return res.json({
       ok: true,
       orden,
       productos: detalle
     });
 
   } catch (error) {
-    res.status(500).json({ ok: false, message: error.message });
+    console.error("ERROR DETALLE ORDEN:", error);
+    return res.status(500).json({ ok: false, message: "Error interno del servidor" });
   }
 };
 
