@@ -1,6 +1,7 @@
 const db = require("../config/db");
 
 // ======================
+<<<<<<< HEAD
 // LISTAR CATEGORÍAS
 // ======================
 exports.listar = async (req, res) => {
@@ -20,6 +21,17 @@ exports.listar = async (req, res) => {
       ok: false,
       message: "Error al listar categorías",
     });
+=======
+// LISTAR CATEGORÍAS (TODAS)
+// ======================
+exports.listar = async (req, res) => {
+  try {
+    // 🔥 Quitamos el WHERE estado = 1 y pedimos el estado
+    const [rows] = await db.query("SELECT id_categoria, nombre, estado FROM categorias");
+    return res.json({ ok: true, data: rows });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Error al listar categorías" });
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
   }
 };
 
@@ -128,4 +140,21 @@ exports.eliminar = async (req, res) => {
       message: "Error al eliminar categoría",
     });
   }
+<<<<<<< HEAD
+=======
+};
+
+// ======================
+// ACTIVAR CATEGORÍA
+// ======================
+exports.activar = async (req, res) => {
+  try {
+    const { id_categoria } = req.params;
+    const [result] = await db.query("UPDATE categorias SET estado = 1 WHERE id_categoria = ?", [id_categoria]);
+    if (result.affectedRows === 0) return res.status(404).json({ ok: false, message: "Categoría no encontrada" });
+    return res.json({ ok: true, message: "Categoría activada" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Error al activar categoría" });
+  }
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 };

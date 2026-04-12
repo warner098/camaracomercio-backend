@@ -20,6 +20,11 @@ router.put(
   categoriasController.editar
 );
 
+<<<<<<< HEAD
+=======
+router.put("/:id_categoria/activar", verifyToken(["admin"]), categoriasController.activar);
+
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 router.delete(
   "/:id_categoria",
   verifyToken(["admin"]),

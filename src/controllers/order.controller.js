@@ -284,7 +284,11 @@ const ordenesNegocio = async (req, res) => {
 };
 
 // ============================
+<<<<<<< HEAD
 // DETALLE ORDEN (CLIENTE)
+=======
+// DETALLE ORDEN (MODIFICADO)
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 // ============================
 const detalleOrden = async (req, res) => {
   try {
@@ -308,12 +312,28 @@ const detalleOrden = async (req, res) => {
 
     const orden = ordenRows[0];
 
+<<<<<<< HEAD
     // 🔐 Permisos
     if (user.rol === "cliente" && orden.usuario_id !== user.id_usuario)
       return res.status(403).json({ ok: false, message: "No autorizado" });
 
     if (user.rol === "negocio" && orden.negocio_dueno !== user.id_usuario)
       return res.status(403).json({ ok: false, message: "No autorizado" });
+=======
+    // 🔐 NUEVA LÓGICA DE PERMISOS:
+    // El usuario puede ver la orden si:
+    // 1. Es el dueño del negocio que VENDE (negocio_dueno)
+    // 2. Es el usuario que COMPRÓ (usuario_id), sin importar su rol.
+    // 3. Es administrador.
+
+    const esDuenoVendedor = orden.negocio_dueno === user.id_usuario;
+    const esComprador = orden.usuario_id === user.id_usuario;
+    const esAdmin = user.rol === "admin";
+
+    if (!esDuenoVendedor && !esComprador && !esAdmin) {
+      return res.status(403).json({ ok: false, message: "No autorizado para ver esta orden" });
+    }
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 
     const [detalle] = await db.query(
       `SELECT d.*, p.nombre_producto, p.foto

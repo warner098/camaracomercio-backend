@@ -224,11 +224,16 @@ exports.cambiarEstado = async (req, res) => {
     );
 
     if (estado === "aprobado") {
+<<<<<<< HEAD
+=======
+      // 1. Cambiamos rol del usuario
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
       await connection.query(
         "UPDATE usuarios SET rol = 'negocio' WHERE id = ?",
         [solicitud.usuario_id],
       );
 
+<<<<<<< HEAD
       await connection.query(
         `INSERT INTO negocios
           (
@@ -243,17 +248,47 @@ exports.cambiarEstado = async (req, res) => {
             estado
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+=======
+      // 2. Insertamos el nuevo negocio
+      const [insertNegocio] = await connection.query(
+        `INSERT INTO negocios
+          (usuario_id, nombre_negocio, descripcion, categoria, ubicacion, telefono, dueno, email_contacto, estado)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
         [
           solicitud.usuario_id,
           solicitud.nombre_negocio,
           solicitud.descripcion,
+<<<<<<< HEAD
           solicitud.categoria,
+=======
+          solicitud.categoria, // Mantenemos por compatibilidad si aún lo usas
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
           solicitud.ubicacion,
           solicitud.telefono,
           solicitud.dueno,
           solicitud.email,
         ],
       );
+<<<<<<< HEAD
+=======
+
+      const nuevoNegocioId = insertNegocio.insertId;
+
+      // 🔥 3. NUEVO: Traemos las categorías de la solicitud y las pasamos al negocio definitivo
+      const [categoriasSolicitud] = await connection.query(
+        "SELECT categoria_id FROM solicitud_categorias WHERE solicitud_id = ?",
+        [id_solicitud]
+      );
+
+      if (categoriasSolicitud.length > 0) {
+        const values = categoriasSolicitud.map(cat => [nuevoNegocioId, cat.categoria_id]);
+        await connection.query(
+          "INSERT INTO negocio_categorias (negocio_id, categoria_id) VALUES ?",
+          [values]
+        );
+      }
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
     }
 
     await connection.commit();

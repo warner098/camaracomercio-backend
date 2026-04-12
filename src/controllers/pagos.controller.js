@@ -11,6 +11,12 @@ exports.linkPayphone = async (req, res) => {
         return res.status(400).json({ ok: false, message: "El negocio no tiene configurado su Store ID de PayPhone" });
     }
 
+<<<<<<< HEAD
+=======
+    // Definimos la base de la URL del frontend (asegúrate que en tu .env sea http://localhost:5173)
+    const baseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
     const response = await axios.post(
       "https://pay.payphonetodoesposible.com/api/button/Prepare",
       {
@@ -19,6 +25,7 @@ exports.linkPayphone = async (req, res) => {
         currency: "USD",
         clientTransactionId: id_orden.toString(),
         storeId: rows[0].payphone_id, 
+<<<<<<< HEAD
         responseUrl: `${process.env.FRONTEND_URL}/#/pago-finalizado`,
         cancellationUrl: `${process.env.FRONTEND_URL}/#/pago-finalizado`
       },
@@ -27,6 +34,21 @@ exports.linkPayphone = async (req, res) => {
       }
     );
 
+=======
+        // 🔥 URLs corregidas con parámetros de estado
+        responseUrl: `${baseUrl}/pago-finalizado?status=Aprobado`,
+        cancellationUrl: `${baseUrl}/pago-finalizado?status=Cancelado`
+      },
+      {
+        headers: { 
+          // Asegúrate de que este TOKEN sea el de tu cuenta de desarrollador de PayPhone
+          Authorization: `Bearer ${process.env.PAYPHONE_TOKEN}` 
+        }
+      }
+    );
+
+    // PayPhone devuelve la URL en response.data.payWithCard
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
     return res.json({ ok: true, url: response.data.payWithCard });
   } catch (error) {
     const detalleError = error.response?.data?.message || error.message;
@@ -37,7 +59,12 @@ exports.linkPayphone = async (req, res) => {
 
 exports.webhookConfirmacion = async (req, res) => {
   try {
+<<<<<<< HEAD
     const id_orden = req.body.clientTransactionId || req.body.reference; 
+=======
+    const id_orden = req.body.clientTransactionId || req.body.reference;
+    console.log("Webhook recibido para orden:", id_orden);
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
     if (!id_orden) return res.status(400).send("Falta ID");
 
     await db.query(

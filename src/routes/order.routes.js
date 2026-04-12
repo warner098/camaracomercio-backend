@@ -14,6 +14,7 @@ const verifyToken = require("../middlewares/auth");
 // ==========================
 // CLIENTE
 // ==========================
+<<<<<<< HEAD
 router.post(
   "/",
   verifyToken(["cliente"]),
@@ -25,6 +26,10 @@ router.get(
   verifyToken(["cliente"]),
   ordenesCliente
 );
+=======
+router.post("/", verifyToken(["cliente", "negocio", "admin"]), crearOrden);
+router.get("/mis-compras", verifyToken(["cliente", "negocio", "admin"]), ordenesCliente);
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 
 // ==========================
 // NEGOCIO

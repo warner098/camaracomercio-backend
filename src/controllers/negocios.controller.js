@@ -5,6 +5,7 @@ const db = require("../config/db");
 // ======================
 exports.listar = async (req, res) => {
   try {
+<<<<<<< HEAD
     const [rows] = await db.query(
       "SELECT id, nombre_negocio, descripcion, categoria, foto, ubicacion FROM negocios WHERE estado = 1"
     );
@@ -20,6 +21,30 @@ exports.listar = async (req, res) => {
       ok: false,
       message: "Error al listar negocios",
     });
+=======
+    // 🔥 Usamos GROUP_CONCAT para unir los nombres de las categorías de la tabla intermedia
+    const [rows] = await db.query(
+      `SELECT 
+        n.id, 
+        n.nombre_negocio, 
+        n.descripcion, 
+        n.usuario_id,
+        GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria, 
+        n.logo, 
+        n.banner, 
+        n.ubicacion 
+      FROM negocios n
+      LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
+      LEFT JOIN categorias c ON nc.categoria_id = c.id_categoria
+      WHERE n.estado = 1
+      GROUP BY n.id`
+    );
+
+    return res.json({ ok: true, data: rows });
+  } catch (error) {
+    console.error("ERROR LISTAR NEGOCIOS:", error);
+    return res.status(500).json({ ok: false, message: "Error al listar negocios" });
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
   }
 };
 
@@ -30,8 +55,21 @@ exports.detalle = async (req, res) => {
   try {
     const { id_negocio } = req.params;
 
+<<<<<<< HEAD
     const [rows] = await db.query(
       "SELECT * FROM negocios WHERE id = ? AND estado = 1",
+=======
+    // 🔥 Misma lógica de GROUP_CONCAT para el detalle
+    const [rows] = await db.query(
+      `SELECT 
+        n.*, 
+        GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
+      FROM negocios n
+      LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
+      LEFT JOIN categorias c ON nc.categoria_id = c.id_categoria
+      WHERE n.id = ? AND n.estado = 1
+      GROUP BY n.id`,
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
       [id_negocio]
     );
 
@@ -100,6 +138,7 @@ exports.crear = async (req, res) => {
 
 exports.miNegocio = async (req, res) => {
   try {
+<<<<<<< HEAD
 
     const usuario_id = req.user.id_usuario;
 
@@ -131,10 +170,43 @@ exports.miNegocio = async (req, res) => {
 // ======================
 // EDITAR NEGOCIO
 // ======================
+=======
+    const usuario_id = req.user.id_usuario;
+
+    // 1. Buscamos el negocio
+    const [negociosRows] = await db.query(
+      `SELECT * FROM negocios WHERE usuario_id = ? AND estado = 1`,
+      [usuario_id]
+    );
+
+    if (!negociosRows.length) {
+      return res.status(404).json({ ok: false, message: "No tienes un negocio registrado" });
+    }
+
+    const negocio = negociosRows[0];
+
+    // 2. Buscamos sus categorías asignadas en la nueva tabla
+    const [catRows] = await db.query(
+      `SELECT categoria_id FROM negocio_categorias WHERE negocio_id = ?`,
+      [negocio.id]
+    );
+
+    // Mapeamos para devolver un arreglo simple de IDs: [1, 3, 5]
+    negocio.categorias = catRows.map(c => c.categoria_id);
+
+    res.json({ ok: true, data: negocio });
+  } catch (error) {
+    console.error("Error en miNegocio:", error);
+    res.status(500).json({ ok: false, message: "Error servidor" });
+  }
+};
+
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 exports.editar = async (req, res) => {
   try {
     const { id_negocio } = req.params;
     const id_usuario = req.user.id_usuario;
+<<<<<<< HEAD
     const { nombre, descripcion, direccion, telefono } = req.body;
 
     const [result] = await db.query(
@@ -162,6 +234,54 @@ exports.editar = async (req, res) => {
       ok: false,
       message: "Error al editar negocio",
     });
+=======
+    
+    const { 
+      nombre_negocio, descripcion, ubicacion, telefono, 
+      email_contacto, horarios, facebook, instagram,
+      tiktok, x_twitter, youtube, whatsapp, telegram,
+      payphone_id, categorias // 🔥 Extraemos el arreglo de categorías
+    } = req.body;
+
+    // 1. Actualizamos los datos de texto del negocio
+    let query = `
+      UPDATE negocios 
+      SET 
+        nombre_negocio = ?, descripcion = ?, ubicacion = ?, telefono = ?,
+        email_contacto = ?, horarios = ?, facebook = ?, instagram = ?,
+        tiktok = ?, x_twitter = ?, youtube = ?, whatsapp = ?, telegram = ?,
+        payphone_id = ?
+      WHERE id = ? AND usuario_id = ?
+    `;
+
+    const params = [
+      nombre_negocio, descripcion || null, ubicacion, telefono, 
+      email_contacto || null, horarios || null, facebook || null, instagram || null, 
+      tiktok || null, x_twitter || null, youtube || null, whatsapp || null, telegram || null,
+      payphone_id || null, id_negocio, id_usuario
+    ];
+
+    const [result] = await db.query(query, params);
+
+    if (result.affectedRows === 0) {
+      return res.status(403).json({ ok: false, message: "No autorizado o negocio no existe" });
+    }
+
+    // 2. Actualizamos las categorías (Borramos las viejas e insertamos las nuevas)
+    await db.query(`DELETE FROM negocio_categorias WHERE negocio_id = ?`, [id_negocio]);
+
+    if (categorias && categorias.length > 0) {
+      // Preparamos los datos para insertarlos de un solo golpe: [[negocio_id, cat_id1], [negocio_id, cat_id2]]
+      const values = categorias.map(cat_id => [id_negocio, cat_id]);
+      await db.query(`INSERT INTO negocio_categorias (negocio_id, categoria_id) VALUES ?`, [values]);
+    }
+
+    return res.json({ ok: true, message: "Información actualizada correctamente" });
+
+  } catch (error) {
+    console.error("ERROR EDITAR NEGOCIO:", error);
+    return res.status(500).json({ ok: false, message: "Error al actualizar la información" });
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
   }
 };
 
@@ -218,4 +338,101 @@ exports.actualizarConfigPago = async (req, res) => {
   } catch (error) {
     res.status(500).json({ ok: false, message: "Error al actualizar" });
   }
+<<<<<<< HEAD
+=======
+};
+
+// ======================
+// ACTUALIZAR SOLO IMÁGENES (LOGO Y BANNER)
+// ======================
+exports.actualizarImagenes = async (req, res) => {
+  try {
+    const { id_negocio } = req.params;
+    const id_usuario = req.user.id_usuario;
+    
+    const logo = req.files?.logo ? req.files.logo[0].path : null;
+    const banner = req.files?.banner ? req.files.banner[0].path : null;
+
+    if (!logo && !banner) {
+      return res.status(400).json({ ok: false, message: "No se enviaron imágenes" });
+    }
+
+    // 🔥 CORRECCIÓN: Forma segura de armar el UPDATE
+    let updates = [];
+    const params = [];
+
+    if (logo) {
+      updates.push("logo = ?");
+      params.push(logo);
+    }
+    
+    if (banner) {
+      updates.push("banner = ?");
+      params.push(banner);
+    }
+
+    const query = `UPDATE negocios SET ${updates.join(', ')} WHERE id = ? AND usuario_id = ?`;
+    params.push(id_negocio, id_usuario);
+
+    const [result] = await db.query(query, params);
+
+    if (result.affectedRows === 0) {
+      return res.status(403).json({ ok: false, message: "No autorizado o negocio no existe" });
+    }
+
+    return res.json({ ok: true, message: "Imágenes actualizadas", logo, banner });
+
+  } catch (error) {
+    console.error("ERROR ACTUALIZAR IMÁGENES:", error);
+    return res.status(500).json({ ok: false, message: "Error al actualizar imágenes" });
+  }
+};
+
+// ======================
+// PANEL ADMIN: LISTAR TODOS LOS NEGOCIOS
+// ======================
+exports.listarAdmin = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT 
+        n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado,
+        u.nombre AS dueno_nombre, u.correo AS dueno_correo,
+        GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
+      FROM negocios n
+      LEFT JOIN usuarios u ON n.usuario_id = u.id
+      LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
+      LEFT JOIN categorias c ON nc.categoria_id = c.id_categoria
+      GROUP BY n.id
+      ORDER BY n.fecha_creacion DESC`
+    );
+    return res.json({ ok: true, data: rows });
+  } catch (error) {
+    console.error("ERROR LISTAR NEGOCIOS ADMIN:", error);
+    return res.status(500).json({ ok: false, message: "Error al listar negocios para admin" });
+  }
+};
+
+// ======================
+// PANEL ADMIN: CAMBIAR ESTADO DE NEGOCIO
+// ======================
+exports.toggleEstadoAdmin = async (req, res) => {
+  try {
+    const { id_negocio } = req.params;
+    const { estado } = req.body; // Esperamos 1 (Activo) o 0 (Suspendido)
+
+    const [result] = await db.query(
+      "UPDATE negocios SET estado = ? WHERE id = ?",
+      [estado, id_negocio]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ ok: false, message: "Negocio no encontrado" });
+    }
+
+    return res.json({ ok: true, message: `Negocio ${estado === 1 ? 'reactivado' : 'suspendido'} correctamente` });
+  } catch (error) {
+    console.error("ERROR TOGGLE ESTADO NEGOCIO:", error);
+    return res.status(500).json({ ok: false, message: "Error al cambiar estado del negocio" });
+  }
+>>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 };
