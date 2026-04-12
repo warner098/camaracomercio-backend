@@ -258,6 +258,12 @@ const detalleOrden = async (req, res) => {
     const esComprador = idComprador === userIdPeticion;
     const esAdmin = user.rol === "admin";
 
+    // En order.controller.js, dentro de detalleOrden:
+console.log("--- DEBUG SEGURIDAD ---");
+console.log("ID Usuario Token:", user?.id_usuario || user?.id);
+console.log("ID Dueño Negocio:", orden.negocio_dueno);
+console.log("Rol:", user?.rol);
+
     // Si NO es el que vende, ni el que compra, ni admin -> BLOQUEO TOTAL
     if (!esDuenoVendedor && !esComprador && !esAdmin) {
       console.log(`⚠️ Intento de acceso no autorizado a Orden #${id_orden} por Usuario ${userIdPeticion}`);
