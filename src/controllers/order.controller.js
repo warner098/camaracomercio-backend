@@ -35,7 +35,6 @@ const crearOrden = async (req, res) => {
     let total = 0;
 
     for (const item of items) {
-
       if (!item.producto_id)
         throw new Error("Producto inválido");
 
@@ -50,11 +49,9 @@ const crearOrden = async (req, res) => {
         throw new Error("Producto no disponible");
 
       const producto = productoRows[0];
-
       let subtotal = 0;
 
       if (producto.tipo_venta === "unidad") {
-
         if (!item.cantidad || item.cantidad <= 0)
           throw new Error("Cantidad inválida");
 
@@ -62,9 +59,7 @@ const crearOrden = async (req, res) => {
           throw new Error("Stock insuficiente");
 
         subtotal = producto.precio * item.cantidad;
-
       } else if (producto.tipo_venta === "peso") {
-
         if (!item.peso || item.peso <= 0)
           throw new Error("Peso inválido");
 
@@ -96,7 +91,6 @@ const crearOrden = async (req, res) => {
     const orden_id = ordenResult.insertId;
 
     for (const item of items) {
-
       const [[producto]] = await connection.query(
         "SELECT precio, tipo_venta FROM productos WHERE id = ?",
         [item.producto_id]
@@ -106,7 +100,6 @@ const crearOrden = async (req, res) => {
 
       if (producto.tipo_venta === "unidad") {
         subtotal = producto.precio * item.cantidad;
-
         await connection.query(
           "UPDATE productos SET stock = stock - ? WHERE id = ?",
           [item.cantidad, item.producto_id]
@@ -116,19 +109,10 @@ const crearOrden = async (req, res) => {
           `INSERT INTO detalle_orden
            (orden_id, producto_id, cantidad, precio_unitario, subtotal)
            VALUES (?, ?, ?, ?, ?)`,
-          [
-            orden_id,
-            item.producto_id,
-            item.cantidad,
-            producto.precio,
-            subtotal
-          ]
+          [orden_id, item.producto_id, item.cantidad, producto.precio, subtotal]
         );
-
       } else {
-
         subtotal = producto.precio * item.peso;
-
         await connection.query(
           "UPDATE productos SET stock = stock - ? WHERE id = ?",
           [item.peso, item.producto_id]
@@ -138,13 +122,7 @@ const crearOrden = async (req, res) => {
           `INSERT INTO detalle_orden
            (orden_id, producto_id, peso, precio_unitario, subtotal)
            VALUES (?, ?, ?, ?, ?)`,
-          [
-            orden_id,
-            item.producto_id,
-            item.peso,
-            producto.precio,
-            subtotal
-          ]
+          [orden_id, item.producto_id, item.peso, producto.precio, subtotal]
         );
       }
     }
@@ -158,26 +136,19 @@ const crearOrden = async (req, res) => {
     });
 
   } catch (error) {
-
     await connection.rollback();
-
-    res.status(500).json({
-      ok: false,
-      message: error.message
-    });
-
+    res.status(500).json({ ok: false, message: error.message });
   } finally {
     connection.release();
   }
 };
 
 // ============================
-// ÓRDENES DEL CLIENTE
+// ÓRDENES DEL CLIENTE (MIS COMPRAS)
 // ============================
 const ordenesCliente = async (req, res) => {
   try {
     const usuario_id = req.user.id_usuario;
-
     const [rows] = await db.query(
       `SELECT id, total, estado, fecha_creacion
        FROM ordenes
@@ -185,18 +156,9 @@ const ordenesCliente = async (req, res) => {
        ORDER BY fecha_creacion DESC`,
       [usuario_id]
     );
-
-    return res.json({
-      ok: true,
-      data: rows
-    });
-
+    return res.json({ ok: true, data: rows });
   } catch (error) {
-    console.error("ERROR ORDENES CLIENTE:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al listar órdenes"
-    });
+    return res.status(500).json({ ok: false, message: "Error al listar órdenes" });
   }
 };
 
@@ -212,10 +174,7 @@ const cambiarEstado = async (req, res) => {
     const estadosValidos = ["pendiente", "pagado", "cancelado"];
 
     if (!estadosValidos.includes(estado)) {
-      return res.status(400).json({
-        ok: false,
-        message: "Estado inválido"
-      });
+      return res.status(400).json({ ok: false, message: "Estado inválido" });
     }
 
     const [result] = await db.query(
@@ -227,40 +186,28 @@ const cambiarEstado = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(403).json({
-        ok: false,
-        message: "No autorizado"
-      });
+      return res.status(403).json({ ok: false, message: "No autorizado" });
     }
 
-    return res.json({
-      ok: true,
-      message: "Estado actualizado"
-    });
-
+    return res.json({ ok: true, message: "Estado actualizado" });
   } catch (error) {
-    console.error("ERROR CAMBIAR ESTADO:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al actualizar estado"
-    });
+    return res.status(500).json({ ok: false, message: "Error al actualizar estado" });
   }
 };
 
 // ============================
-// ÓRDENES DEL NEGOCIO
+// ÓRDENES DEL NEGOCIO (MIS VENTAS)
 // ============================
 const ordenesNegocio = async (req, res) => {
   try {
     const usuario_id = req.user.id_usuario;
-
     const [rows] = await db.query(
       `SELECT 
-         o.id,
-         o.total,
-         o.estado,
-         o.fecha_creacion,
-         u.nombre AS cliente
+          o.id,
+          o.total,
+          o.estado,
+          o.fecha_creacion,
+          u.nombre AS cliente
        FROM ordenes o
        JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
@@ -268,27 +215,14 @@ const ordenesNegocio = async (req, res) => {
        ORDER BY o.fecha_creacion DESC`,
       [usuario_id]
     );
-
-    return res.json({
-      ok: true,
-      data: rows
-    });
-
+    return res.json({ ok: true, data: rows });
   } catch (error) {
-    console.error("ERROR ORDENES NEGOCIO:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al obtener órdenes"
-    });
+    return res.status(500).json({ ok: false, message: "Error al obtener órdenes" });
   }
 };
 
 // ============================
-<<<<<<< HEAD
-// DETALLE ORDEN (CLIENTE)
-=======
 // DETALLE ORDEN (MODIFICADO)
->>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 // ============================
 const detalleOrden = async (req, res) => {
   try {
@@ -312,20 +246,7 @@ const detalleOrden = async (req, res) => {
 
     const orden = ordenRows[0];
 
-<<<<<<< HEAD
-    // 🔐 Permisos
-    if (user.rol === "cliente" && orden.usuario_id !== user.id_usuario)
-      return res.status(403).json({ ok: false, message: "No autorizado" });
-
-    if (user.rol === "negocio" && orden.negocio_dueno !== user.id_usuario)
-      return res.status(403).json({ ok: false, message: "No autorizado" });
-=======
-    // 🔐 NUEVA LÓGICA DE PERMISOS:
-    // El usuario puede ver la orden si:
-    // 1. Es el dueño del negocio que VENDE (negocio_dueno)
-    // 2. Es el usuario que COMPRÓ (usuario_id), sin importar su rol.
-    // 3. Es administrador.
-
+    // 🔐 LÓGICA DE PERMISOS:
     const esDuenoVendedor = orden.negocio_dueno === user.id_usuario;
     const esComprador = orden.usuario_id === user.id_usuario;
     const esAdmin = user.rol === "admin";
@@ -333,7 +254,6 @@ const detalleOrden = async (req, res) => {
     if (!esDuenoVendedor && !esComprador && !esAdmin) {
       return res.status(403).json({ ok: false, message: "No autorizado para ver esta orden" });
     }
->>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 
     const [detalle] = await db.query(
       `SELECT d.*, p.nombre_producto, p.foto

@@ -1,37 +1,15 @@
 const db = require("../config/db");
 
 // ======================
-<<<<<<< HEAD
-// LISTAR CATEGORÍAS
+// LISTAR CATEGORÍAS (TODAS PARA ADMIN)
 // ======================
 exports.listar = async (req, res) => {
   try {
-    const [rows] = await db.query(
-      "SELECT id_categoria, nombre FROM categorias WHERE estado = 1"
-    );
-
-    return res.json({
-      ok: true,
-      data: rows,
-    });
-
-  } catch (error) {
-    console.error("ERROR LISTAR CATEGORIAS:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al listar categorías",
-    });
-=======
-// LISTAR CATEGORÍAS (TODAS)
-// ======================
-exports.listar = async (req, res) => {
-  try {
-    // 🔥 Quitamos el WHERE estado = 1 y pedimos el estado
     const [rows] = await db.query("SELECT id_categoria, nombre, estado FROM categorias");
     return res.json({ ok: true, data: rows });
   } catch (error) {
+    console.error("ERROR LISTAR CATEGORIAS:", error);
     return res.status(500).json({ ok: false, message: "Error al listar categorías" });
->>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
   }
 };
 
@@ -41,30 +19,13 @@ exports.listar = async (req, res) => {
 exports.crear = async (req, res) => {
   try {
     const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ ok: false, message: "Nombre requerido" });
 
-    if (!nombre) {
-      return res.status(400).json({
-        ok: false,
-        message: "Nombre requerido",
-      });
-    }
-
-    await db.query(
-      "INSERT INTO categorias (nombre, estado) VALUES (?, 1)",
-      [nombre]
-    );
-
-    return res.status(201).json({
-      ok: true,
-      message: "Categoría creada",
-    });
-
+    await db.query("INSERT INTO categorias (nombre, estado) VALUES (?, 1)", [nombre]);
+    return res.status(201).json({ ok: true, message: "Categoría creada" });
   } catch (error) {
     console.error("ERROR CREAR CATEGORIA:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al crear categoría",
-    });
+    return res.status(500).json({ ok: false, message: "Error al crear categoría" });
   }
 };
 
@@ -75,73 +36,31 @@ exports.editar = async (req, res) => {
   try {
     const { id_categoria } = req.params;
     const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ ok: false, message: "Nombre requerido" });
 
-    if (!nombre) {
-      return res.status(400).json({
-        ok: false,
-        message: "Nombre requerido",
-      });
-    }
+    const [result] = await db.query("UPDATE categorias SET nombre = ? WHERE id_categoria = ?", [nombre, id_categoria]);
+    if (result.affectedRows === 0) return res.status(404).json({ ok: false, message: "Categoría no encontrada" });
 
-    const [result] = await db.query(
-      "UPDATE categorias SET nombre = ? WHERE id_categoria = ?",
-      [nombre, id_categoria]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        ok: false,
-        message: "Categoría no encontrada",
-      });
-    }
-
-    return res.json({
-      ok: true,
-      message: "Categoría actualizada",
-    });
-
+    return res.json({ ok: true, message: "Categoría actualizada" });
   } catch (error) {
     console.error("ERROR EDITAR CATEGORIA:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al editar categoría",
-    });
+    return res.status(500).json({ ok: false, message: "Error al editar categoría" });
   }
 };
 
 // ======================
-// ELIMINAR (SOFT DELETE)
+// ELIMINAR (DESACTIVAR)
 // ======================
 exports.eliminar = async (req, res) => {
   try {
     const { id_categoria } = req.params;
-
-    const [result] = await db.query(
-      "UPDATE categorias SET estado = 0 WHERE id_categoria = ?",
-      [id_categoria]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        ok: false,
-        message: "Categoría no encontrada",
-      });
-    }
-
-    return res.json({
-      ok: true,
-      message: "Categoría eliminada",
-    });
-
+    const [result] = await db.query("UPDATE categorias SET estado = 0 WHERE id_categoria = ?", [id_categoria]);
+    if (result.affectedRows === 0) return res.status(404).json({ ok: false, message: "Categoría no encontrada" });
+    return res.json({ ok: true, message: "Categoría eliminada" });
   } catch (error) {
     console.error("ERROR ELIMINAR CATEGORIA:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Error al eliminar categoría",
-    });
+    return res.status(500).json({ ok: false, message: "Error al eliminar categoría" });
   }
-<<<<<<< HEAD
-=======
 };
 
 // ======================
@@ -154,7 +73,7 @@ exports.activar = async (req, res) => {
     if (result.affectedRows === 0) return res.status(404).json({ ok: false, message: "Categoría no encontrada" });
     return res.json({ ok: true, message: "Categoría activada" });
   } catch (error) {
+    console.error("ERROR ACTIVAR CATEGORIA:", error);
     return res.status(500).json({ ok: false, message: "Error al activar categoría" });
   }
->>>>>>> 522ded4 (🚀 Backend: Despliegue inicial para Render)
 };
