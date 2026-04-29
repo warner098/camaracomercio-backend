@@ -4,7 +4,11 @@ const cors = require("cors");
 const app = express();
 
 // Middlewares globales
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Rutas
@@ -16,6 +20,7 @@ app.use("/api/solicitudes", require("./routes/solicitudes.routes"));
 app.use("/api/pagos", require("./routes/pagos.routes"));
 app.use("/api/categorias", require("./routes/categorias.routes"));
 app.use("/api/unidades", require("./routes/unidades.routes"));
+app.use("/api/reportes", require("./routes/reportes.routes"));
 
 // Ruta base de prueba
 app.get("/", (req, res) => {

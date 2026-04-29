@@ -131,7 +131,7 @@ exports.editar = async (req, res) => {
       nombre_negocio, descripcion, ubicacion, telefono, 
       email_contacto, horarios, facebook, instagram,
       tiktok, x_twitter, youtube, whatsapp, telegram,
-      payphone_id, categorias 
+      payphone_id, costo_delivery, categorias // 🔥 Agregado costo_delivery
     } = req.body;
 
     let query = `
@@ -140,7 +140,7 @@ exports.editar = async (req, res) => {
         nombre_negocio = ?, descripcion = ?, ubicacion = ?, telefono = ?,
         email_contacto = ?, horarios = ?, facebook = ?, instagram = ?,
         tiktok = ?, x_twitter = ?, youtube = ?, whatsapp = ?, telegram = ?,
-        payphone_id = ?
+        payphone_id = ?, costo_delivery = ?
       WHERE id = ? AND usuario_id = ?
     `;
 
@@ -148,7 +148,9 @@ exports.editar = async (req, res) => {
       nombre_negocio, descripcion || null, ubicacion, telefono, 
       email_contacto || null, horarios || null, facebook || null, instagram || null, 
       tiktok || null, x_twitter || null, youtube || null, whatsapp || null, telegram || null,
-      payphone_id || null, id_negocio, id_usuario
+      payphone_id || null, 
+      costo_delivery || 0, // 🔥 Aseguramos que sea un número
+      id_negocio, id_usuario
     ];
 
     const [result] = await db.query(query, params);
@@ -157,7 +159,7 @@ exports.editar = async (req, res) => {
       return res.status(403).json({ ok: false, message: "No autorizado o negocio no existe" });
     }
 
-    // Actualizamos las categorías
+    // Actualizamos las categorías (esto se mantiene igual)
     await db.query(`DELETE FROM negocio_categorias WHERE negocio_id = ?`, [id_negocio]);
 
     if (categorias && categorias.length > 0) {

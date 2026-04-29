@@ -8,18 +8,22 @@ const pool = mysql.createPool({
   port: process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  timezone: '-05:00', 
+
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  connectTimeout: 20000
 });
 
-// Verificación de conexión al iniciar servidor
 const testConnection = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log("✅ Base de datos conectada correctamente");
+    console.log("✅ Base de datos conectada correctamente (Zona Horaria UTC-5)");
     connection.release();
   } catch (error) {
     console.error("❌ Error al conectar a la base de datos:", error.message);
-    process.exit(1); // 🔥 En producción es mejor detener el servidor si falla la BD
+    process.exit(1); 
   }
 };
 
