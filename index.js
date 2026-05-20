@@ -11,7 +11,7 @@ const server = http.createServer(app);
 // 2. Configuramos Socket.io
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: ["https://transcendent-axolotl-727785.netlify.app", "http://localhost:5173", "http://127.0.0.1:5173"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
