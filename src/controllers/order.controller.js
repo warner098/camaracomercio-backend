@@ -134,14 +134,14 @@ const ordenesCliente = async (req, res) => {
 // CAMBIAR ESTADO (DUEÑO NEGOCIO)
 // ============================
 const cambiarEstado = async (req, res) => {
-  const connection = await db.getConnection(); // 🔥 Usamos transacción para seguridad
+  const connection = await db.getConnection(); 
   try {
     const { id_orden } = req.params;
     const { estado } = req.body;
     const usuario_id = req.user.id_usuario;
 
-    // 🔥 Añadimos "confirmado" a los estados
-    const estadosValidos = ["pendiente", "confirmado", "preparando", "pagado", "cancelado"];
+    // 🔥 Lista oficial de estados del flujo de negocio
+    const estadosValidos = ["pendiente", "confirmado", "pagado", "entregado", "cancelado"];
 
     if (!estadosValidos.includes(estado)) {
       return res.status(400).json({ ok: false, message: "Estado inválido" });
@@ -160,6 +160,18 @@ const cambiarEstado = async (req, res) => {
 
     const estadoActual = ordenRows[0].estado_actual;
 
+    // 🛡️ SEGURIDAD: Bloquear si ya está cancelada
+    if (estadoActual === "cancelado") {
+      await connection.rollback();
+      return res.status(400).json({ ok: false, message: "Orden cancelada. No se puede modificar." });
+    }
+
+    // 🛡️ SEGURIDAD: Bloquear si intentan cancelar algo pagado o entregado (Evita estafas o descuadres)
+    if ((estadoActual === "pagado" || estadoActual === "entregado") && estado === "cancelado") {
+      await connection.rollback();
+      return res.status(400).json({ ok: false, message: "La orden ya fue pagada o entregada. Debe realizar una devolución manual antes de cancelar." });
+    }
+
     // 🔥 SI SE CANCELA, DEVOLVEMOS EL STOCK
     if (estado === "cancelado" && estadoActual !== "cancelado") {
       const [items] = await connection.query(
@@ -168,7 +180,6 @@ const cambiarEstado = async (req, res) => {
       );
 
       for (const item of items) {
-        // Vemos si se vendió por unidad (cantidad) o por peso (peso)
         const cantidadRestaurar = item.cantidad ? item.cantidad : item.peso;
         await connection.query(
           "UPDATE productos SET stock = stock + ? WHERE id = ?", 
@@ -299,6 +310,64 @@ console.log("Rol:", user?.rol);
 };
 
 // ============================
+// DETALLE ORDEN (ESTRICTO SOLO PARA DUEÑO DE NEGOCIO)
+// ============================
+const detalleOrdenNegocio = async (req, res) => {
+  try {
+    const { id_orden } = req.params;
+    const user = req.user; 
+
+    const [ordenRows] = await db.query(
+      `SELECT o.*, 
+              u.nombre AS cliente_nombre,
+              n.nombre_negocio AS negocio_nombre,
+              n.usuario_id AS negocio_dueno
+       FROM ordenes o
+       JOIN usuarios u ON u.id = o.usuario_id
+       JOIN negocios n ON n.id = o.negocio_id
+       WHERE o.id = ?`,
+      [id_orden]
+    );
+
+    if (!ordenRows.length) {
+      return res.status(404).json({ ok: false, message: "Orden no encontrada" });
+    }
+
+    const orden = ordenRows[0];
+    const userIdPeticion = Number(user.id_usuario || user.id); 
+    const idDuenoNegocio = Number(orden.negocio_dueno);
+
+    // 🔐 VALIDACIÓN ULTRA ESTRICTA: ¿Es el dueño de ESTE negocio?
+    if (idDuenoNegocio !== userIdPeticion && user.rol !== "admin") {
+      console.log(`⚠️ Intento de escaneo cruzado: Usuario ${userIdPeticion} intentó ver la orden ${id_orden} del negocio ${idDuenoNegocio}`);
+      // Mandamos 403. Esto hará que el frontend pinte el mensaje de error de "No tienes permiso".
+      return res.status(403).json({ 
+        ok: false, 
+        message: "Acceso denegado: Esta orden fue procesada por otro negocio y no tienes permiso para visualizarla o cobrarla." 
+      });
+    }
+
+    const [detalle] = await db.query(
+      `SELECT d.*, p.nombre_producto
+       FROM detalle_orden d
+       JOIN productos p ON p.id = d.producto_id
+       WHERE d.orden_id = ?`,
+      [id_orden]
+    );
+
+    return res.json({
+      ok: true,
+      orden,
+      productos: detalle
+    });
+
+  } catch (error) {
+    console.error("ERROR DETALLE ORDEN NEGOCIO:", error);
+    return res.status(500).json({ ok: false, message: "Error interno del servidor" });
+  }
+};
+
+// ============================
 // HISTORIAL DE ÓRDENES (POR MES Y AÑO)
 // ============================
 const obtenerHistorialMes = async (req, res) => {
@@ -332,5 +401,6 @@ module.exports = {
   ordenesNegocio,
   cambiarEstado,
   detalleOrden,
+  detalleOrdenNegocio,
   obtenerHistorialMes // 🔥 NUEVA FUNCIÓN AGREGADA
 };

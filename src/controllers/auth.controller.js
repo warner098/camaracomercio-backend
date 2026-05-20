@@ -76,7 +76,7 @@ const verificarCuenta = async (req, res) => {
   );
 
   if (rows.length === 0) {
-    return res.status(400).json({ ok: false, message: "Token inválido" });
+    return res.status(400).json({ ok: false, message: "Token inválido o ya utilizado" });
   }
 
   await db.query(
@@ -84,7 +84,7 @@ const verificarCuenta = async (req, res) => {
     [token]
   );
 
-  res.json({ ok: true, message: "Cuenta verificada" });
+  res.json({ ok: true, message: "Cuenta verificada correctamente" });
 };
 
 // =====================
@@ -98,16 +98,23 @@ const login = async (req, res) => {
       return res.status(400).json({ ok: false, message: "Datos incompletos" });
     }
 
-    const [rows] = await db.query("SELECT * FROM usuarios WHERE correo = ?", [email]);
+    // 🔥 Agregamos LEFT JOIN para obtener el estado del negocio (si tiene)
+    const [rows] = await db.query(
+      `SELECT u.*, n.estado AS estado_negocio 
+       FROM usuarios u 
+       LEFT JOIN negocios n ON u.id = n.usuario_id 
+       WHERE u.correo = ?`, 
+      [email]
+    );
 
     if (rows.length === 0) {
-      return res.status(401).json({ ok: false, message: "Credenciales inválidas" });
+      return res.status(400).json({ ok: false, message: "Credenciales inválidas" });
     }
 
     const user = rows[0];
 
     if (!user.verificado) {
-      return res.status(401).json({
+      return res.status(400).json({
         ok: false,
         message: "Debes verificar tu correo antes de iniciar sesión"
       });
@@ -116,7 +123,7 @@ const login = async (req, res) => {
     const valid = await bcrypt.compare(password, user.contrasena);
 
     if (!valid) {
-      return res.status(401).json({ ok: false, message: "Credenciales inválidas" });
+      return res.status(400).json({ ok: false, message: "Credenciales inválidas" });
     }
 
     const token = jwt.sign(
@@ -133,6 +140,7 @@ const login = async (req, res) => {
         nombre: user.nombre,
         cedula: user.cedula,
         rol: user.rol,
+        estado_negocio: user.estado_negocio // 🔥 Ahora el frontend recibe esto
       },
     });
 
@@ -194,32 +202,26 @@ const restablecerPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
 
-    // 1. Log para ver qué llega al backend
-    console.log("Intentando restablecer con token:", token);
-
     if (!token || !newPassword) {
       return res.status(400).json({ ok: false, message: "Datos incompletos" });
     }
 
-    // 2. Buscamos el usuario ignorando la fecha por un segundo para debuggear
     const [userRows] = await db.query(
       "SELECT id, expiracion_token FROM usuarios WHERE token_recuperacion = ?",
       [token]
     );
 
     if (userRows.length === 0) {
-      return res.status(400).json({ ok: false, message: "El token no existe en la base de datos." });
+      return res.status(400).json({ ok: false, message: "El token no existe o ya fue utilizado." });
     }
 
     const usuario = userRows[0];
     const ahora = new Date();
 
-    // 3. Validamos la fecha manualmente en JS para evitar líos de zona horaria de SQL
     if (new Date(usuario.expiracion_token) < ahora) {
         return res.status(400).json({ ok: false, message: "El enlace ha expirado. Solicita uno nuevo." });
     }
 
-    // 4. Si todo está bien, actualizamos
     const hash = await bcrypt.hash(newPassword, 10);
 
     await db.query(

@@ -131,7 +131,7 @@ exports.editar = async (req, res) => {
       nombre_negocio, descripcion, ubicacion, telefono, 
       email_contacto, horarios, facebook, instagram,
       tiktok, x_twitter, youtube, whatsapp, telegram,
-      payphone_id, costo_delivery, categorias // 🔥 Agregado costo_delivery
+      payphone_id, ofrece_delivery, costo_delivery, categorias // 🔥 Agregado ofrece_delivery
     } = req.body;
 
     let query = `
@@ -140,7 +140,7 @@ exports.editar = async (req, res) => {
         nombre_negocio = ?, descripcion = ?, ubicacion = ?, telefono = ?,
         email_contacto = ?, horarios = ?, facebook = ?, instagram = ?,
         tiktok = ?, x_twitter = ?, youtube = ?, whatsapp = ?, telegram = ?,
-        payphone_id = ?, costo_delivery = ?
+        payphone_id = ?, ofrece_delivery = ?, costo_delivery = ?
       WHERE id = ? AND usuario_id = ?
     `;
 
@@ -149,7 +149,8 @@ exports.editar = async (req, res) => {
       email_contacto || null, horarios || null, facebook || null, instagram || null, 
       tiktok || null, x_twitter || null, youtube || null, whatsapp || null, telegram || null,
       payphone_id || null, 
-      costo_delivery || 0, // 🔥 Aseguramos que sea un número
+      ofrece_delivery ? 1 : 0, // 🔥 Guardamos 1 o 0
+      costo_delivery || 0,
       id_negocio, id_usuario
     ];
 
@@ -159,7 +160,6 @@ exports.editar = async (req, res) => {
       return res.status(403).json({ ok: false, message: "No autorizado o negocio no existe" });
     }
 
-    // Actualizamos las categorías (esto se mantiene igual)
     await db.query(`DELETE FROM negocio_categorias WHERE negocio_id = ?`, [id_negocio]);
 
     if (categorias && categorias.length > 0) {
@@ -271,22 +271,31 @@ exports.actualizarImagenes = async (req, res) => {
 // ======================
 exports.listarAdmin = async (req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT 
-        n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado,
-        u.nombre AS dueno_nombre, u.correo AS dueno_correo,
-        GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const [rows] = await db.query(`
+      SELECT n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado, u.nombre AS dueno_nombre, u.correo AS dueno_correo, GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
       FROM negocios n
       LEFT JOIN usuarios u ON n.usuario_id = u.id
       LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
       LEFT JOIN categorias c ON nc.categoria_id = c.id_categoria
       GROUP BY n.id
-      ORDER BY n.fecha_creacion DESC`
-    );
-    return res.json({ ok: true, data: rows });
+      ORDER BY n.fecha_creacion DESC
+      LIMIT ? OFFSET ?
+    `, [limit, offset]);
+
+    const [[{ total }]] = await db.query("SELECT COUNT(*) as total FROM negocios");
+
+    return res.json({ 
+      ok: true, 
+      data: rows,
+      paginacion: { total, page, limit, paginas: Math.ceil(total / limit) }
+    });
   } catch (error) {
     console.error("ERROR LISTAR NEGOCIOS ADMIN:", error);
-    return res.status(500).json({ ok: false, message: "Error al listar negocios para admin" });
+    return res.status(500).json({ ok: false, message: "Error al listar negocios" });
   }
 };
 

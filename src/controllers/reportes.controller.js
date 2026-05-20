@@ -1,110 +1,192 @@
-const PDFDocument = require("pdfkit");
 const db = require("../config/db");
+const PDFDocument = require('pdfkit');
 
-const descargarReportePDF = async (req, res) => {
+exports.generarPDF = async (req, res) => {
   try {
-    const { mes, anio } = req.query; 
+    const { mes, anio } = req.query;
     const usuario_id = req.user.id_usuario;
 
-    // 1. Obtener el ID del negocio del dueño actual
-    const [negocioRows] = await db.query(
-      "SELECT id, nombre_negocio FROM negocios WHERE usuario_id = ?", 
-      [usuario_id]
-    );
-
-    if (negocioRows.length === 0) {
-      return res.status(404).json({ ok: false, message: "No tienes un negocio registrado." });
-    }
-    const negocio = negocioRows[0];
-
-    // 2. Obtener órdenes con JOIN a la tabla usuarios para sacar el nombre del cliente
-    const [ordenes] = await db.query(
-      `SELECT o.id, o.total, o.fecha_creacion, u.nombre AS cliente_nombre 
+    // 1. Validar que existan ventas en ese mes para ese negocio (Pagadas o Entregadas)
+    const [ventas] = await db.query(
+      `SELECT o.id, o.total, o.fecha_creacion, u.nombre AS cliente, o.metodo_pago
        FROM ordenes o
+       JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
-       WHERE o.negocio_id = ? 
-       AND o.estado = 'pagado'
-       AND MONTH(o.fecha_creacion) = ? 
-       AND YEAR(o.fecha_creacion) = ?`,
-      [negocio.id, mes, anio]
+       WHERE n.usuario_id = ? AND MONTH(o.fecha_creacion) = ? AND YEAR(o.fecha_creacion) = ?
+       AND o.estado IN ('pagado', 'entregado')
+       ORDER BY o.fecha_creacion ASC`,
+      [usuario_id, mes, anio]
     );
 
-    // 3. Configurar el documento PDF
+    if (ventas.length === 0) {
+      return res.status(404).json({ ok: false, message: "No hay ventas concretadas en este período." });
+    }
+
+    // 2. Obtener productos más vendidos del mes
+    const [productosTop] = await db.query(
+      `SELECT p.nombre_producto, SUM(IFNULL(d.cantidad, d.peso)) as total_vendido
+       FROM detalle_orden d
+       JOIN ordenes o ON d.orden_id = o.id
+       JOIN productos p ON d.producto_id = p.id
+       JOIN negocios n ON n.id = o.negocio_id
+       WHERE n.usuario_id = ? AND MONTH(o.fecha_creacion) = ? AND YEAR(o.fecha_creacion) = ?
+       AND o.estado IN ('pagado', 'entregado')
+       GROUP BY p.id
+       ORDER BY total_vendido DESC
+       LIMIT 5`,
+      [usuario_id, mes, anio]
+    );
+
+    // Cálculos para el reporte
+    const totalIngresos = ventas.reduce((acc, v) => acc + Number(v.total), 0);
+    const ingresosEfectivo = ventas.filter(v => v.metodo_pago === 'efectivo').reduce((acc, v) => acc + Number(v.total), 0);
+    const ingresosTarjeta = ventas.filter(v => v.metodo_pago === 'tarjeta').reduce((acc, v) => acc + Number(v.total), 0);
+
     const doc = new PDFDocument({ margin: 50 });
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename=Reporte_${mes}_${anio}.pdf`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_Ventas_${mes}_${anio}.pdf`);
     doc.pipe(res);
 
-    // --- DISEÑO DEL REPORTE ---
-    doc.fontSize(22).fillColor("#1b5e20").text("Reporte Mensual de Ventas", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(16).fillColor("#333").text(negocio.nombre_negocio, { align: "center" });
-    doc.fontSize(12).fillColor("#666").text(`Período: Mes ${mes} del año ${anio}`, { align: "center" });
+    // === CABECERA ===
+    doc.fontSize(20).font('Helvetica-Bold').text('Reporte de Ventas Mensual', { align: 'center' });
+    doc.fontSize(12).font('Helvetica').text(`Período: Mes ${mes} - Año ${anio}`, { align: 'center' });
     doc.moveDown(2);
 
-    let totalRecaudado = 0;
+    // === RESUMEN FINANCIERO ===
+    doc.fontSize(14).font('Helvetica-Bold').text('Resumen Financiero', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica');
+    doc.text(`Total de Órdenes Completadas: ${ventas.length}`);
+    doc.text(`Ingresos en Efectivo: $${ingresosEfectivo.toFixed(2)}`);
+    doc.text(`Ingresos por Tarjeta (PayPhone): $${ingresosTarjeta.toFixed(2)}`);
+    doc.font('Helvetica-Bold').text(`Ingresos Totales: $${totalIngresos.toFixed(2)}`);
+    doc.moveDown(2);
 
-    if (ordenes.length === 0) {
-      doc.fontSize(14).fillColor("#999").text("No se registraron ventas pagadas en este período.", { align: "center" });
-    } else {
-      // Cabecera de la tabla en el PDF
-      doc.fontSize(12).fillColor("#000").text("ID", 50, doc.y, { continued: true });
-      doc.text("Cliente", 120, doc.y, { continued: true });
-      doc.text("Fecha", 350, doc.y, { continued: true });
-      doc.text("Monto", 450, doc.y);
-      doc.moveTo(50, doc.y + 2).lineTo(530, doc.y + 2).stroke();
-      doc.moveDown(1);
-
-      // Listar órdenes
-      ordenes.forEach(o => {
-        const fecha = new Date(o.fecha_creacion).toLocaleDateString();
-        doc.fontSize(10).fillColor("#333");
-        doc.text(`#${o.id}`, 50, doc.y, { continued: true });
-        doc.text(`${o.cliente_nombre || 'S/N'}`, 120, doc.y, { continued: true });
-        doc.text(`${fecha}`, 350, doc.y, { continued: true });
-        doc.text(`$${Number(o.total).toFixed(2)}`, 450, doc.y);
-        doc.moveDown(0.5);
-        totalRecaudado += Number(o.total);
+    // === TOP PRODUCTOS ===
+    doc.fontSize(14).font('Helvetica-Bold').text('Productos Más Vendidos', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica');
+    if (productosTop.length > 0) {
+      productosTop.forEach((p, index) => {
+        doc.text(`${index + 1}. ${p.nombre_producto} - ${Number(p.total_vendido)} unidades/peso`);
       });
-
-      doc.moveDown(2);
-      doc.moveTo(400, doc.y).lineTo(530, doc.y).stroke();
-      doc.moveDown(0.5);
-      doc.fontSize(14).fillColor("#1b5e20").text(`TOTAL: $${totalRecaudado.toFixed(2)}`, { align: "right" });
+    } else {
+      doc.text('No hay datos suficientes de productos.');
     }
+    doc.moveDown(2);
+
+    // === LISTADO DE ÓRDENES (TABLA ALINEADA Y BONITA) ===
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#198754').text('Detalle de Órdenes', 50, doc.y, { underline: true });
+    doc.fillColor('#000000'); // Resetear color a negro
+    doc.moveDown(1);
+
+    // Definimos las posiciones X fijas de cada columna para que jamás se descuadren
+    const colIdX = 50;
+    const colFechaX = 90;
+    const colClienteX = 190;
+    const colTotalX = 380;
+    const colMetodoX = 470;
+
+    let tableHeaderY = doc.y;
+
+    // Pintamos las cabeceras de la tabla
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text('ID', colIdX, tableHeaderY, { width: 35 });
+    doc.text('Fecha', colFechaX, tableHeaderY, { width: 90 });
+    doc.text('Cliente', colClienteX, tableHeaderY, { width: 180 });
+    doc.text('Total', colTotalX, tableHeaderY, { width: 80, align: 'right' });
+    doc.text('Método', colMetodoX, tableHeaderY, { width: 80, align: 'right' });
+
+    // Línea divisoria de la cabecera
+    doc.moveTo(50, tableHeaderY + 15).lineTo(550, tableHeaderY + 15).lineWidth(1).strokeColor('#cccccc').stroke();
+    
+    // Punto de partida para los datos
+    let currentY = tableHeaderY + 25;
+    doc.font('Helvetica');
+
+    ventas.forEach(v => {
+      // 🛡️ Control de salto de página automático por si hay decenas de filas
+      if (currentY > 730) {
+        doc.addPage();
+        currentY = 50; // Reiniciamos arriba en la nueva hoja
+      }
+
+      const fecha = new Date(v.fecha_creacion).toLocaleDateString();
+
+      // Forzamos a que todas las celdas de esta fila se pinten exactamente en el mismo "currentY"
+      doc.text(`#${v.id}`, colIdX, currentY, { width: 35 });
+      doc.text(fecha, colFechaX, currentY, { width: 90 });
+      doc.text(v.cliente, colClienteX, currentY, { width: 180 });
+      doc.text(`$${Number(v.total).toFixed(2)}`, colTotalX, currentY, { width: 80, align: 'right' });
+      doc.text(v.metodo_pago.toUpperCase(), colMetodoX, currentY, { width: 80, align: 'right' });
+
+      // Avanzamos 22 puntos limpiamente hacia la siguiente fila
+      currentY += 22; 
+    });
 
     doc.end();
-
   } catch (error) {
-    console.error("❌ Error generando PDF:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ ok: false, message: "Error interno al generar el PDF." });
-    }
+    console.error("ERROR GENERANDO PDF:", error);
+    res.status(500).json({ ok: false, message: "Error al generar PDF" });
   }
 };
 
-const listarReportes = async (req, res) => {
+// POST /api/reportes/guardar
+exports.guardarReporte = async (req, res) => {
   try {
+    const { mes, anio, total_ventas } = req.body;
     const usuario_id = req.user.id_usuario;
-    
-    // Primero sacamos el ID del negocio
-    const [negocioRows] = await db.query("SELECT id FROM negocios WHERE usuario_id = ?", [usuario_id]);
-    if (negocioRows.length === 0) return res.json({ ok: true, data: [] });
 
-    // Luego buscamos sus reportes guardados
-    const [reportes] = await db.query(
-      "SELECT * FROM reportes_mensuales WHERE negocio_id = ? ORDER BY anio DESC, mes DESC",
-      [negocioRows[0].id]
+    const [negocioRows] = await db.query("SELECT id FROM negocios WHERE usuario_id = ?", [usuario_id]);
+    if (negocioRows.length === 0) return res.status(404).json({ok: false, message: "Negocio no encontrado"});
+    const negocio_id = negocioRows[0].id;
+
+    // Verificar si ya está guardado
+    const [exist] = await db.query("SELECT id FROM reportes_guardados WHERE negocio_id = ? AND mes = ? AND anio = ?", [negocio_id, mes, anio]);
+    if (exist.length > 0) return res.status(400).json({ok: false, message: "El reporte de este mes ya está guardado."});
+
+    await db.query(
+      "INSERT INTO reportes_guardados (negocio_id, mes, anio, total_ventas) VALUES (?, ?, ?, ?)",
+      [negocio_id, mes, anio, total_ventas]
     );
 
-    res.json({ ok: true, data: reportes });
+    res.json({ ok: true, message: "Reporte guardado exitosamente" });
   } catch (error) {
-    res.status(500).json({ ok: false, message: "Error al obtener reportes" });
+    res.status(500).json({ ok: false, message: "Error al guardar reporte" });
   }
 };
 
-// Exórtala junto con la del PDF:
-module.exports = {
-  descargarReportePDF,
-  listarReportes // 🔥 NUEVA
+// GET /api/reportes/listado
+exports.listarReportesGuardados = async (req, res) => {
+  try {
+    const usuario_id = req.user.id_usuario;
+    const [rows] = await db.query(
+      `SELECT r.* FROM reportes_guardados r 
+       JOIN negocios n ON n.id = r.negocio_id 
+       WHERE n.usuario_id = ? ORDER BY r.anio DESC, r.mes DESC`,
+      [usuario_id]
+    );
+    res.json({ ok: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: "Error al cargar reportes" });
+  }
+};
+
+// DELETE /api/reportes/eliminar/:id
+exports.eliminarReporte = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const usuario_id = req.user.id_usuario;
+    
+    // Solo elimina si el reporte pertenece a un negocio de este usuario
+    await db.query(
+      `DELETE r FROM reportes_guardados r
+       JOIN negocios n ON n.id = r.negocio_id
+       WHERE r.id = ? AND n.usuario_id = ?`,
+      [id, usuario_id]
+    );
+    res.json({ ok: true, message: "Reporte eliminado" });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: "Error al eliminar reporte" });
+  }
 };

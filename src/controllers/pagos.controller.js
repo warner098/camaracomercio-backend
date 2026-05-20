@@ -45,9 +45,19 @@ exports.linkPayphone = async (req, res) => {
 exports.webhookConfirmacion = async (req, res) => {
   try {
     const id_orden = req.body.clientTransactionId || req.body.reference;
-    console.log("Webhook recibido para orden:", id_orden);
+    const transactionId = req.body.transactionId; // PayPhone envía esto
 
-    if (!id_orden) return res.status(400).send("Falta ID");
+    if (!id_orden || !transactionId) return res.status(400).send("Faltan datos");
+
+    // Validar con la API de PayPhone que el pago es real y está "Approved"
+    const response = await axios.get(
+      `https://pay.payphonetodoesposible.com/api/api/v2.0/Transactions/${transactionId}`,
+      { headers: { Authorization: `Bearer ${process.env.PAYPHONE_TOKEN}` } }
+    );
+
+    if (response.data.transactionStatus !== 'Approved') {
+      return res.status(400).send("Transacción no aprobada");
+    }
 
     await db.query(
       `UPDATE ordenes SET estado = 'pagado', fecha_pago = NOW() WHERE id = ?`,

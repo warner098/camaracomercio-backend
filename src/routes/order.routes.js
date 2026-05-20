@@ -6,6 +6,7 @@ const {
   ordenesNegocio,
   cambiarEstado,
   detalleOrden,
+  detalleOrdenNegocio,
   obtenerHistorialMes
 } = require("../controllers/order.controller");
 const verifyToken = require("../middlewares/auth");
@@ -29,6 +30,9 @@ router.get("/historial", verifyToken(["negocio", "admin"]), obtenerHistorialMes)
 // ============================
 
 router.get("/:id_orden", verifyToken(["cliente", "negocio", "admin"]), detalleOrden);
+router.get("/negocio/orden/:id_orden", verifyToken, detalleOrdenNegocio);
 router.put("/:id_orden/estado", verifyToken(["negocio", "admin"]), cambiarEstado);
+
+
 
 module.exports = router;

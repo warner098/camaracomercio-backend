@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const iniciarTareasProgramadas = require("./utils/cron");
 
 const app = express();
 
@@ -34,5 +35,7 @@ app.use((req, res) => {
     message: "Ruta no encontrada"
   });
 });
+
+iniciarTareasProgramadas();
 
 module.exports = app;

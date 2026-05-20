@@ -4,6 +4,13 @@ const router = express.Router();
 const controller = require("../controllers/solicitudes.controller");
 const verifyToken = require("../middlewares/auth");
 
+
+router.get(
+  "/mi-estado",
+  verifyToken(["cliente", "negocio", "admin"]),
+  controller.verificarMiEstado
+);
+
 // Cliente envía solicitud
 router.post(
   "/",

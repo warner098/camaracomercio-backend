@@ -1,6 +1,45 @@
 const db = require("../config/db");
 
 // ==========================
+// VERIFICAR ESTADO DEL USUARIO
+// ==========================
+exports.verificarMiEstado = async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    const usuario_id = req.user.id_usuario;
+
+    // 1. ¿Ya tiene un negocio aprobado y registrado?
+    const [negocio] = await connection.query(
+      "SELECT id FROM negocios WHERE usuario_id = ?",
+      [usuario_id]
+    );
+
+    if (negocio.length > 0) {
+      return res.json({ ok: true, estado: 'aprobado' });
+    }
+
+    // 2. ¿Tiene una solicitud? (Buscamos la más reciente)
+    const [solicitud] = await connection.query(
+      "SELECT estado FROM solicitudes_negocio WHERE usuario_id = ? ORDER BY fecha_creacion DESC LIMIT 1",
+      [usuario_id]
+    );
+
+    if (solicitud.length > 0) {
+      return res.json({ ok: true, estado: solicitud[0].estado }); // 'pendiente' o 'rechazado'
+    }
+
+    // 3. Si no tiene negocio ni solicitud previa
+    return res.json({ ok: true, estado: 'ninguna' });
+
+  } catch (error) {
+    console.error("ERROR VERIFICAR ESTADO:", error);
+    return res.status(500).json({ ok: false, message: "Error al verificar estado" });
+  } finally {
+    connection.release();
+  }
+};
+
+// ==========================
 // CLIENTE ENVÍA SOLICITUD
 // ==========================
 exports.crearSolicitud = async (req, res) => {
@@ -107,13 +146,17 @@ exports.obtenerCategorias = async (req, res) => {
 exports.listarSolicitudes = async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT s.*, u.nombre, u.correo, u.rol
+      `SELECT s.*, u.nombre, u.correo, u.rol,
+              GROUP_CONCAT(sc.categoria_id SEPARATOR ',') AS categorias_ids
        FROM solicitudes_negocio s
        JOIN usuarios u ON u.id = s.usuario_id
+       LEFT JOIN solicitud_categorias sc ON s.id = sc.solicitud_id
+       GROUP BY s.id
        ORDER BY s.fecha_creacion DESC`,
     );
     return res.json({ ok: true, data: rows });
   } catch (error) {
+    console.error("ERROR LISTAR SOLICITUDES:", error);
     return res.status(500).json({ ok: false, message: "Error al listar solicitudes" });
   }
 };
@@ -200,3 +243,4 @@ exports.cambiarEstado = async (req, res) => {
     connection.release();
   }
 };
+

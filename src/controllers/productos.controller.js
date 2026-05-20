@@ -1,28 +1,48 @@
 const pool = require("../config/db");
+const cloudinary = require("../config/cloudinary");
+
+// ======================
+// HELPER: BORRAR IMAGEN DE CLOUDINARY
+// ======================
+const borrarDeCloudinary = async (urlFoto) => {
+  if (!urlFoto) return;
+  try {
+    const partes = urlFoto.split('/');
+    const archivoConExtension = partes[partes.length - 1];
+    const nombreArchivo = archivoConExtension.split('.')[0];
+    // Asume que la carpeta en Cloudinary se llama "productos" según tu config de multer
+    const publicId = `productos/${nombreArchivo}`; 
+    await cloudinary.uploader.destroy(publicId);
+  } catch (error) {
+    console.error("Error borrando imagen antigua de Cloudinary:", error);
+  }
+};
 
 // ======================
 // LISTAR PRODUCTOS (PÚBLICO)
 // ======================
 exports.listarTodos = async (req, res) => {
   try {
+    // Parámetros de la URL: ?page=1&limit=10
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
     const [productos] = await pool.query(`
-      SELECT
-        p.id,
-        p.nombre_producto,
-        p.descripcion,
-        p.precio,
-        p.stock,
-        p.foto,
-        p.tipo_venta,
-        p.unidad_medida,
-        n.nombre_negocio
+      SELECT p.id, p.nombre_producto, p.descripcion, p.precio, p.stock, p.foto, p.tipo_venta, p.unidad_medida, n.nombre_negocio
       FROM productos p
       JOIN negocios n ON p.negocio_id = n.id
       WHERE p.estado = 1
-    `);
+      LIMIT ? OFFSET ?
+    `, [limit, offset]); 
 
-    return res.json({ ok: true, data: productos });
+    const [[{ total }]] = await pool.query("SELECT COUNT(*) as total FROM productos WHERE estado = 1");
 
+    return res.json({ 
+      ok: true, 
+      data: productos, 
+      paginacion: { total, page, limit, paginas: Math.ceil(total / limit) } 
+    });
   } catch (error) {
     console.error("ERROR LISTAR TODOS:", error);
     return res.status(500).json({ ok: false, message: "Error al obtener productos" });
@@ -166,6 +186,14 @@ exports.editar = async (req, res) => {
     } = req.body;
 
     const foto = req.file?.path;
+
+    // 🔥 SI HAY UNA FOTO NUEVA, BUSCAMOS LA VIEJA Y LA BORRAMOS DE CLOUDINARY
+    if (foto) {
+      const [productoRow] = await pool.query("SELECT foto FROM productos WHERE id = ?", [id_producto]);
+      if (productoRow.length > 0 && productoRow[0].foto) {
+        await borrarDeCloudinary(productoRow[0].foto);
+      }
+    }
 
     let query = `
       UPDATE productos p
