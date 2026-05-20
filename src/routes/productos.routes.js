@@ -7,6 +7,7 @@ const upload = require("../middlewares/upload");
 
 // público
 router.get("/", productosController.listarTodos);
+router.post("/buscar-inteligente", productosController.buscarInteligente);
 
 router.get(
   "/negocio/:id_negocio",
