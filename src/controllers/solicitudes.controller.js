@@ -55,12 +55,20 @@ exports.crearSolicitud = async (req, res) => {
       telefono,
       categorias,
     } = req.body;
+    const telefonoLimpio = String(telefono || "").replace(/\D/g, "").trim();
 
     // VALIDACIONES
-    if (!nombre_negocio || !ubicacion || !telefono) {
+    if (!nombre_negocio || !ubicacion || !telefonoLimpio) {
       return res.status(400).json({
         ok: false,
         message: "Complete todos los campos obligatorios",
+      });
+    }
+
+    if (telefonoLimpio.length < 7 || telefonoLimpio.length > 15) {
+      return res.status(400).json({
+        ok: false,
+        message: "Ingrese un telefono valido de 7 a 15 digitos",
       });
     }
 
@@ -104,7 +112,7 @@ exports.crearSolicitud = async (req, res) => {
       `INSERT INTO solicitudes_negocio
        (usuario_id, nombre_negocio, descripcion, categoria, ubicacion, telefono, estado)
        VALUES (?, ?, ?, ?, ?, ?, 'pendiente')`,
-      [usuario_id, nombre_negocio, descripcion, categoriaPrincipal, ubicacion, telefono],
+      [usuario_id, nombre_negocio, descripcion, categoriaPrincipal, ubicacion, telefonoLimpio],
     );
 
     const solicitudId = result.insertId;

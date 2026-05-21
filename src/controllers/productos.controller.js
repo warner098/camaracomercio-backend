@@ -5,11 +5,37 @@ const axios = require("axios");
 const STOPWORDS_CONSULTA = new Set([
   "a",
   "al",
+  "algo",
+  "ayuda",
+  "ayudar",
+  "bot",
+  "buenas",
+  "busca",
+  "buscar",
+  "busco",
+  "chat",
+  "como",
+  "comercio",
+  "comer",
   "con",
+  "dame",
   "de",
   "del",
+  "estas",
+  "esta",
+  "dime",
+  "donde",
+  "eh",
+  "ehh",
+  "emm",
+  "mmm",
   "el",
   "en",
+  "encuentra",
+  "encuentran",
+  "encuentro",
+  "ere",
+  "eres",
   "la",
   "las",
   "lo",
@@ -17,20 +43,129 @@ const STOPWORDS_CONSULTA = new Set([
   "me",
   "mi",
   "necesito",
+  "negocio",
+  "negocios",
+  "oye",
   "para",
+  "porfa",
+  "favor",
+  "porfavor",
   "por",
+  "poco",
+  "poquito",
+  "poquita",
+  "poquitos",
+  "poquitas",
+  "pues",
+  "pue",
+  "puede",
+  "puedes",
   "que",
   "quiero",
+  "recomendacion",
+  "recomendaciones",
+  "recomiendame",
+  "recomendame",
+  "saber",
   "se",
+  "solo",
+  "sugerencia",
+  "sugerencias",
   "su",
   "sus",
+  "tal",
+  "te",
+  "tu",
+  "vas",
+  "va",
   "un",
   "una",
   "uno",
   "unos",
   "unas",
+  "vende",
+  "venden",
+  "vender",
+  "venta",
+  "ia",
+  "hola",
+  "hablar",
+  "contigo",
+  "conmigo",
+  "conversar",
+  "charlar",
+  "amigo",
+  "amiga",
+  "bro",
+  "broo",
+  "broh",
   "y"
 ]);
+
+const SALUDOS_CONSULTA = ["hola", "buenas", "hey", "ey", "saludos"];
+const FRASES_CHARLA = [
+  "hola como estas",
+  "hola como vas",
+  "como estas",
+  "como vas",
+  "que tal",
+  "todo bien",
+  "como te va",
+  "como andas",
+  "como andas hoy",
+  "quiero hablar contigo",
+  "solo quiero hablar contigo",
+  "solo hablar contigo",
+  "quiero conversar contigo",
+  "solo quiero conversar",
+  "quiero charlar contigo",
+  "amigo",
+  "eres mi amigo"
+];
+const CORTESIAS_CONSULTA = [
+  "gracias",
+  "muchas gracias",
+  "ok",
+  "oki",
+  "okey",
+  "perfecto",
+  "listo",
+  "dale",
+  "genial",
+  "super",
+  "excelente",
+  "entiendo",
+  "entendido",
+  "esta bien",
+  "ta bien"
+];
+const FRASES_INDECISION = [
+  "no se que pedir",
+  "no se que mismo pedir",
+  "no se que comprar",
+  "que me recomiendas",
+  "recomendame",
+  "recomiendame",
+  "dame una idea",
+  "algo rico",
+  "algo para comer",
+  "que podria pedir",
+  "que puedo pedir",
+  "que compro"
+];
+const FRASES_SEGUIMIENTO = [
+  "y donde mas",
+  "donde mas",
+  "otra opcion",
+  "otras opciones",
+  "otra alternativa",
+  "otras alternativas",
+  "algo parecido",
+  "algo similar",
+  "y que mas",
+  "que mas",
+  "y si no hay"
+];
 
 const normalizarTexto = (texto = "") =>
   texto
@@ -244,6 +379,213 @@ const construirMensajeSugerencia = (item) => {
   return `La mejor coincidencia para ${item.termino} es ${mejor.nombre_producto} en ${mejor.nombre_negocio}.`;
 };
 
+const limpiarItemsDetectados = (items = []) =>
+  Array.isArray(items)
+    ? Array.from(
+        new Set(
+          items
+            .map((item) => tokenizarSinStopwords(item).join(" ").trim())
+            .filter(Boolean)
+        )
+      ).slice(0, 8)
+    : [];
+
+const limpiarHistorialConversacion = (history = []) =>
+  Array.isArray(history)
+    ? history
+        .slice(-8)
+        .map((item) => ({
+          role: item?.role === "assistant" ? "assistant" : "user",
+          text: (item?.text || "").toString().trim(),
+          items_detectados: Array.isArray(item?.items_detectados)
+            ? item.items_detectados
+                .map((value) => normalizarTexto(value))
+                .filter(Boolean)
+                .slice(0, 8)
+            : []
+        }))
+        .filter((item) => item.text)
+    : [];
+
+const formatearHistorialParaPrompt = (history = []) =>
+  history
+    .slice(-6)
+    .map((item) => `${item.role === "assistant" ? "Asistente" : "Usuario"}: ${item.text}`)
+    .join("\n");
+
+const contieneAlgunaFrase = (texto = "", frases = []) =>
+  frases.some((frase) => texto === frase || texto.includes(frase));
+
+const obtenerUltimosItemsDelHistorial = (history = []) => {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const items = history[index]?.items_detectados || [];
+    if (items.length) {
+      return Array.from(new Set(items));
+    }
+  }
+
+  return [];
+};
+
+const esConsultaDeCortesia = (consultaNormalizada = "") => {
+  if (!consultaNormalizada) return false;
+  return (
+    contieneAlgunaFrase(consultaNormalizada, CORTESIAS_CONSULTA) &&
+    tokenizar(consultaNormalizada).length <= 8
+  );
+};
+
+const esConsultaDeIndecision = (consultaNormalizada = "") =>
+  contieneAlgunaFrase(consultaNormalizada, FRASES_INDECISION);
+
+const esSeguimientoConversacional = (consultaNormalizada = "") =>
+  contieneAlgunaFrase(consultaNormalizada, FRASES_SEGUIMIENTO);
+
+const esConsultaDeCharla = (consultaNormalizada = "") =>
+  contieneAlgunaFrase(consultaNormalizada, FRASES_CHARLA);
+
+const esBusquedaExplicita = (consultaNormalizada = "", itemsTentativos = []) => {
+  if (!consultaNormalizada) return false;
+
+  const frasesConversacionales = [
+    "hablar contigo",
+    "conversar contigo",
+    "charlar contigo",
+    "como estas",
+    "como vas",
+    "que tal",
+    "todo bien"
+  ];
+
+  if (frasesConversacionales.some((frase) => consultaNormalizada.includes(frase))) {
+    return false;
+  }
+
+  const pistasBusqueda = [
+    "donde venden",
+    "donde encuentro",
+    "busco",
+    "necesito",
+    "quiero comprar",
+    "quiero pedir",
+    "quiero conseguir",
+    "tienen",
+    "venden",
+    "hay "
+  ];
+
+  if (pistasBusqueda.some((frase) => consultaNormalizada.includes(frase))) {
+    return itemsTentativos.length > 0;
+  }
+
+  if (consultaNormalizada.startsWith("quiero ") && itemsTentativos.length > 0) {
+    return true;
+  }
+
+  return false;
+};
+
+const esConsultaCortaDeProducto = (consultaNormalizada = "", itemsTentativos = []) => {
+  if (!itemsTentativos.length) return false;
+  if (esConsultaDeCharla(consultaNormalizada)) return false;
+  if (esConsultaDeCortesia(consultaNormalizada)) return false;
+  if (esConsultaDeIndecision(consultaNormalizada)) return false;
+
+  const tokens = tokenizar(consultaNormalizada);
+  return tokens.length > 0 && tokens.length <= 3;
+};
+
+const construirRespuestaConversacional = ({
+  consulta,
+  history = [],
+  tipo = "general"
+}) => {
+  const consultaNormalizada = normalizarTexto(consulta);
+  const contextoItems = obtenerUltimosItemsDelHistorial(history);
+  const resumenContexto = contextoItems.length
+    ? ` Hace un momento revisamos ${unirListaNatural(contextoItems)}.`
+    : "";
+
+  if (tipo === "cortesia") {
+    return contextoItems.length
+      ? `De nada.${resumenContexto} Si quieres, seguimos revisando esos productos o vemos algo nuevo.`
+      : "De nada. Si quieres, puedo ayudarte a encontrar productos, comparar negocios o darte una sugerencia.";
+  }
+
+  if (tipo === "indecision") {
+    return `Claro, no pasa nada, te ayudo a decidir.${resumenContexto} Si quieres, dime si buscas algo para cocinar, una bebida, algo para comer ahora o productos para la casa, y te voy orientando paso a paso.`;
+  }
+
+  if (tipo === "saludo") {
+    return "Hola, aqui estoy para ayudarte. Puedes preguntarme por productos, por un negocio en concreto o simplemente decirme que no sabes que pedir y te acompaño a decidir.";
+  }
+
+  if (tipo === "charla") {
+    return `Hola, estoy bien y listo para ayudarte.${resumenContexto} Si quieres, dime que producto buscas o que necesitas comprar y lo revisamos juntos.`;
+  }
+
+  if (tipo === "seguimiento_sin_contexto") {
+    return "Claro. Para seguir, dime el producto o la combinacion que quieres revisar y lo vemos enseguida.";
+  }
+
+  if (!consultaNormalizada) {
+    return "Estoy aqui para ayudarte. Puedes preguntarme por productos, negocios o pedirme una sugerencia.";
+  }
+
+  return "Te ayudo con gusto. Cuentame que producto buscas o que necesitas comprar y lo reviso contigo.";
+};
+
+const construirRespuestaChat = ({
+  consulta,
+  distribucionPorItem = [],
+  recomendacionPrincipal = null,
+  sugerencias = []
+}) => {
+  const consultaNormalizada = normalizarTexto(consulta);
+  const haySaludo = SALUDOS_CONSULTA.some((saludo) => consultaNormalizada.includes(saludo));
+  const encontrados = distribucionPorItem.filter((item) => item.encontrado);
+  const faltantes = distribucionPorItem.filter((item) => !item.encontrado);
+  const prefijo = haySaludo ? "Hola, con gusto te ayudo. " : "";
+
+  if (!distribucionPorItem.length) {
+    return haySaludo
+      ? "Hola, con gusto te ayudo. Puedes preguntarme en que negocio venden un producto o si te conviene comprar varias cosas en un solo comercio."
+      : "Claro, puedo ayudarte a encontrar productos y comercios. Si quieres, prueba con algo como: donde venden arroz y sal.";
+  }
+
+  if (!encontrados.length) {
+    return `${prefijo}No encontre coincidencias claras para ${unirListaNatural(
+      faltantes.map((item) => item.termino)
+    )}. Si quieres, prueba con otro nombre o con un producto parecido y lo revisamos juntos.`;
+  }
+
+  if (recomendacionPrincipal && encontrados.length === distribucionPorItem.length) {
+    return `${prefijo}Si, en ${recomendacionPrincipal.nombre_negocio} encontramos ${unirListaNatural(
+      encontrados.map((item) => item.termino)
+    )}. Por ahora, ${recomendacionPrincipal.nombre_negocio} parece ser la mejor opcion para esa consulta. Si quieres, tambien puedo ayudarte a buscar algo mas.`;
+  }
+
+  const partes = encontrados.map(
+    (item) => `${item.termino} en ${item.nombre_negocio}`
+  );
+
+  let respuesta = `${prefijo}Encontre ${unirListaNatural(partes)}.`;
+
+  if (faltantes.length) {
+    respuesta += ` No encontre ${unirListaNatural(
+      faltantes.map((item) => item.termino)
+    )}.`;
+  }
+
+  if (sugerencias.some((item) => item.sugerencias?.length > 0)) {
+    respuesta += " Si quieres, tambien puedo sugerirte productos parecidos o ayudarte a buscar otra combinacion.";
+  } else {
+    respuesta += " Si quieres, puedes preguntarme por otro producto y seguimos viendo opciones.";
+  }
+
+  return respuesta;
+};
+
 const mensajePareceInconsistente = (mensaje = "", item = null, negociosValidos = []) => {
   if (!mensaje) return true;
 
@@ -403,6 +745,281 @@ const extraerTextoGemini = (response = {}) => {
   return textos.join("\n").trim();
 };
 
+const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+  if (!geminiApiKey) {
+    throw new Error("Falta GEMINI_API_KEY en el entorno");
+  }
+
+  const schema = {
+    type: "object",
+    properties: {
+      tipo: { type: "string" },
+      items_detectados: {
+        type: "array",
+        items: { type: "string" }
+      }
+    },
+    required: ["tipo", "items_detectados"]
+  };
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+    {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: [
+                "Eres un asistente virtual amigable de un marketplace local.",
+                "Tu trabajo es conversar naturalmente con el usuario, como un chat libre, y decidir si el mensaje requiere buscar productos en el catalogo o si solo corresponde responder como chat.",
+                "Por defecto, prioriza una conversacion natural. NO conviertas cualquier frase en una busqueda.",
+                "Solo marca tipo='busqueda' cuando el usuario realmente este pidiendo, buscando, comparando o preguntando por un producto o comercio.",
+                "Si el usuario saluda, agradece, duda, conversa, bromea, pide compañia, pregunta como estas o quiere hablar, responde como conversacion y NO fuerces una busqueda.",
+                "Si el usuario pide un producto o pregunta en que negocio lo venden, marca tipo='busqueda' y extrae solo productos concretos y cortos, sin relleno como 'un poco de', 'por favor' o frases sociales.",
+                "No inventes resultados del catalogo en esta etapa. Solo interpreta la intencion.",
+                "Usa tipo='conversacion' o tipo='busqueda'.",
+                "Ejemplos:",
+                "- 'hola como estas?' => tipo='conversacion'",
+                "- 'solo quiero hablar contigo' => tipo='conversacion'",
+                "- 'amigo?' => tipo='conversacion'",
+                "- 'cuentame algo' => tipo='conversacion'",
+                "- 'eres una ia?' => tipo='conversacion'",
+                "- 'dame una sugerencia' => tipo='conversacion'",
+                "- 'que me recomiendas?' => tipo='conversacion'",
+                "- 'quiero un poco de sal' => tipo='busqueda', items_detectados=['sal']",
+                "- 'pues quiero pollo' => tipo='busqueda', items_detectados=['pollo']",
+                "- 'donde venden arroz y aceite' => tipo='busqueda', items_detectados=['arroz','aceite']",
+                "",
+                JSON.stringify(
+                  {
+                    consulta,
+                    historial: history.slice(-6)
+                  },
+                  null,
+                  2
+                )
+              ].join("\n")
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.4,
+        responseMimeType: "application/json",
+        responseSchema: schema
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+      ]
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
+      },
+      timeout: 30000
+    }
+  );
+
+  const texto = extraerTextoGemini(response.data);
+  if (!texto) {
+    throw new Error("Gemini no devolvio contenido util");
+  }
+
+  return JSON.parse(texto);
+};
+
+const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+  if (!geminiApiKey) {
+    throw new Error("Falta GEMINI_API_KEY en el entorno");
+  }
+
+  const historial = formatearHistorialParaPrompt(history);
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+    {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: [
+                "Eres un asistente virtual amable y natural dentro de un marketplace local.",
+                "Cuando el usuario no este haciendo una busqueda de productos, responde como una persona conversando con naturalidad.",
+                "Habla como un chatbot libre, cercano y humano, sin sonar robotico, sin repetir plantillas y sin listar capacidades a cada rato.",
+                "Responde primero a lo que el usuario dijo. No cambies de tema ni lo redirijas a productos a menos que el usuario lo pida.",
+                "Si el usuario saluda, bromea, pregunta algo personal como si eres una IA, dice que quiere hablar, pide una sugerencia general o simplemente conversa, responde como chat normal.",
+                "No cierres cada respuesta con frases como 'puedo ayudarte a buscar productos' salvo que de verdad venga al caso.",
+                "Puedes hacer preguntas de seguimiento cortas y naturales cuando ayuden a continuar la conversacion.",
+                "Mantente amable, breve y calido. Normalmente responde en 1 a 3 oraciones.",
+                "No inventes disponibilidad de productos ni negocios si no te dieron datos reales del catalogo.",
+                "Ejemplos de tono:",
+                "- Usuario: 'eres una ia?'",
+                "  Respuesta: 'Si, soy una IA, pero podemos hablar normal. Que te provoca conversar?'",
+                "- Usuario: 'solo quiero hablar contigo'",
+                "  Respuesta: 'Claro, hablemos un rato. Que tienes en mente?'",
+                "- Usuario: 'dame una sugerencia'",
+                "  Respuesta: 'Claro. Te doy una sugerencia de que tipo: para comer, para comprar o para pasar el rato?'",
+                "- Usuario: 'amigo'",
+                "  Respuesta: 'Aqui ando contigo. Que cuentas?'",
+                "- Usuario: 'hola como estas?'",
+                "  Respuesta: 'Hola, todo bien por aqui. Y tu como vas?'",
+                historial ? `Historial reciente:\n${historial}` : "",
+                `Mensaje actual del usuario: ${consulta}`
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.9,
+        topP: 0.95
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+      ]
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
+      },
+      timeout: 30000
+    }
+  );
+
+  const texto = extraerTextoGemini(response.data);
+  if (!texto) {
+    throw new Error("Gemini no devolvio respuesta conversacional");
+  }
+
+  return texto.trim();
+};
+
+const consultarGeminiParaRespuestaConCatalogo = async ({
+  consulta,
+  history = [],
+  resumenConsulta,
+  recomendacionPrincipal,
+  alternativas = [],
+  sugerencias = []
+}) => {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+  if (!geminiApiKey) {
+    throw new Error("Falta GEMINI_API_KEY en el entorno");
+  }
+
+  const historial = formatearHistorialParaPrompt(history);
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+    {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: [
+                "Eres un asistente virtual de compras amable y natural.",
+                "Responde como un chatbot conversacional, no como un motor rigido.",
+                "Tu respuesta debe sonar humana, clara y breve.",
+                "Usa SOLO los datos reales del catalogo que se te entregan abajo.",
+                "No inventes productos, negocios ni disponibilidad.",
+                "Si algo no se encontro, dilo con naturalidad.",
+                "Si hay una mejor opcion, menciona el negocio de forma amigable.",
+                historial ? `Historial reciente:\n${historial}` : "",
+                `Mensaje actual del usuario: ${consulta}`,
+                "Datos reales del catalogo:",
+                JSON.stringify(
+                  {
+                    resumen_consulta: resumenConsulta,
+                    recomendacion_principal: recomendacionPrincipal
+                      ? {
+                          nombre_negocio: recomendacionPrincipal.nombre_negocio,
+                          cobertura: recomendacionPrincipal.cobertura,
+                          productos: (recomendacionPrincipal.productos || []).map((producto) => ({
+                            termino: producto.termino,
+                            nombre_producto: producto.nombre_producto,
+                            precio: producto.precio
+                          })),
+                          faltantes: recomendacionPrincipal.faltantes || []
+                        }
+                      : null,
+                    alternativas: alternativas.slice(0, 3).map((negocio) => ({
+                      nombre_negocio: negocio.nombre_negocio,
+                      cobertura: negocio.cobertura,
+                      productos: (negocio.productos || []).map((producto) => ({
+                        termino: producto.termino,
+                        nombre_producto: producto.nombre_producto,
+                        precio: producto.precio
+                      })),
+                      faltantes: negocio.faltantes || []
+                    })),
+                    sugerencias: sugerencias.slice(0, 5).map((item) => ({
+                      termino: item.termino,
+                      sugerencias: (item.sugerencias || []).slice(0, 2).map((producto) => ({
+                        nombre_producto: producto.nombre_producto,
+                        nombre_negocio: producto.nombre_negocio,
+                        precio: producto.precio
+                      }))
+                    }))
+                  },
+                  null,
+                  2
+                )
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.6,
+        topP: 0.95
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+      ]
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
+      },
+      timeout: 30000
+    }
+  );
+
+  const texto = extraerTextoGemini(response.data);
+  if (!texto) {
+    throw new Error("Gemini no devolvio respuesta con catalogo");
+  }
+
+  return texto.trim();
+};
+
 const consultarGeminiParaRanking = async ({ consulta, items, candidatos, sugerencias }) => {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
@@ -415,6 +1032,7 @@ const consultarGeminiParaRanking = async ({ consulta, items, candidatos, sugeren
     type: "object",
     properties: {
       resumen: { type: "string" },
+      respuesta_chat: { type: "string" },
       items_detectados: {
         type: "array",
         items: { type: "string" }
@@ -448,6 +1066,7 @@ const consultarGeminiParaRanking = async ({ consulta, items, candidatos, sugeren
     },
     required: [
       "resumen",
+      "respuesta_chat",
       "items_detectados",
       "orden_negocios",
       "motivos_por_negocio",
@@ -468,6 +1087,8 @@ const consultarGeminiParaRanking = async ({ consulta, items, candidatos, sugeren
                 "Usa solo los candidatos dados.",
                 "No inventes datos.",
                 "Prioriza cubrir mas productos en un solo negocio, luego menos faltantes y luego menor costo estimado.",
+                "Ademas de ordenar negocios, redacta una respuesta_chat breve, amigable y natural para el usuario.",
+                "En respuesta_chat solo menciona disponibilidad real entregada en los datos.",
                 "Responde solo JSON valido que cumpla el schema.",
                 "",
                 JSON.stringify(
@@ -567,17 +1188,91 @@ exports.buscarInteligente = async (req, res) => {
   try {
     const consulta = (req.body?.consulta || req.query?.consulta || "").trim();
     const categoriaFiltro = (req.body?.categoria || req.query?.categoria || "").trim();
+    const history = limpiarHistorialConversacion(req.body?.history || []);
 
     if (!consulta) {
       return res.status(400).json({ ok: false, message: "Debes enviar una consulta" });
     }
 
-    const itemsSolicitados = partirConsultaEnItems(consulta);
+    const consultaNormalizada = normalizarTexto(consulta);
+    const ultimoContexto = obtenerUltimosItemsDelHistorial(history);
+    const itemsTentativos = partirConsultaEnItems(consulta);
+    let interpretacionIA = null;
+    let respuestaConversacionalIA = null;
+    let itemsSolicitados = [];
+    const geminiDisponible = Boolean(process.env.GEMINI_API_KEY);
 
-    if (!itemsSolicitados.length) {
-      return res.status(400).json({
-        ok: false,
-        message: "No pudimos identificar productos en la consulta"
+    if (geminiDisponible) {
+      try {
+        interpretacionIA = await consultarGeminiParaIntencion({
+          consulta,
+          history
+        });
+      } catch (error) {
+        console.error("ERROR INTENCION GEMINI:", error.response?.data || error.message);
+      }
+    }
+
+    if (interpretacionIA?.tipo === "busqueda") {
+      itemsSolicitados = limpiarItemsDetectados(interpretacionIA.items_detectados);
+    }
+
+    const usarContextoPrevio =
+      esSeguimientoConversacional(consultaNormalizada) && ultimoContexto.length > 0;
+
+    if (interpretacionIA?.tipo === "busqueda" && !itemsSolicitados.length && usarContextoPrevio) {
+      itemsSolicitados = ultimoContexto;
+    }
+
+    if (!interpretacionIA) {
+      const esBusquedaReal =
+        usarContextoPrevio ||
+        esBusquedaExplicita(consultaNormalizada, itemsTentativos) ||
+        esConsultaCortaDeProducto(consultaNormalizada, itemsTentativos);
+
+      if (usarContextoPrevio) {
+        itemsSolicitados = ultimoContexto;
+      } else if (esBusquedaReal) {
+        itemsSolicitados = itemsTentativos;
+      }
+    }
+
+    if (interpretacionIA?.tipo === "conversacion" || !itemsSolicitados.length) {
+      try {
+        respuestaConversacionalIA = await consultarGeminiParaConversacion({
+          consulta,
+          history
+        });
+      } catch (error) {
+        console.error("ERROR CHAT GEMINI:", error.response?.data || error.message);
+      }
+
+      return res.json({
+        ok: true,
+        modo: respuestaConversacionalIA ? "gemini" : "asistente",
+        consulta,
+        items_detectados: [],
+        respuesta_chat:
+          respuestaConversacionalIA ||
+          construirRespuestaConversacional({
+            consulta,
+            history,
+            tipo: esConsultaDeIndecision(consultaNormalizada)
+              ? "indecision"
+              : esConsultaDeCortesia(consultaNormalizada)
+              ? "cortesia"
+              : esConsultaDeCharla(consultaNormalizada)
+              ? "charla"
+              : SALUDOS_CONSULTA.some((saludo) => consultaNormalizada.includes(saludo))
+              ? "saludo"
+              : "general"
+          }),
+        resumen_consulta: null,
+        resumen_ia: null,
+        distribucion_por_item: [],
+        recomendacion_principal: null,
+        alternativas: [],
+        sugerencias: []
       });
     }
 
@@ -807,6 +1502,29 @@ exports.buscarInteligente = async (req, res) => {
       sugerenciasPorItem
     );
     const resumenConsulta = construirResumenConsulta(distribucionPorItem);
+    const respuestaChatLocal = construirRespuestaChat({
+      consulta,
+      distribucionPorItem,
+      recomendacionPrincipal: resultadosPorNegocio[0] || null,
+      sugerencias: sugerenciasFinales
+    });
+    let respuestaChat = respuestaChatLocal;
+
+    try {
+      respuestaChat = await consultarGeminiParaRespuestaConCatalogo({
+        consulta,
+        history,
+        resumenConsulta,
+        recomendacionPrincipal: resultadosPorNegocio[0] || null,
+        alternativas: resultadosPorNegocio.slice(1, 5),
+        sugerencias: sugerenciasFinales
+      });
+    } catch (error) {
+      console.error("ERROR RESPUESTA CATALOGO GEMINI:", error.response?.data || error.message);
+      respuestaChat =
+        (typeof rankingIA?.respuesta_chat === "string" && rankingIA.respuesta_chat.trim()) ||
+        respuestaChatLocal;
+    }
 
     return res.json({
       ok: true,
@@ -817,6 +1535,7 @@ exports.buscarInteligente = async (req, res) => {
       items_detectados: rankingIA?.items_detectados?.length
         ? rankingIA.items_detectados
         : itemsSolicitados,
+      respuesta_chat: respuestaChat,
       resumen_consulta: resumenConsulta,
       resumen_ia: rankingIA?.resumen || null,
       distribucion_por_item: distribucionPorItem,
