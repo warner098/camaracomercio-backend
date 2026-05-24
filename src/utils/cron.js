@@ -8,18 +8,23 @@ const iniciarTareasProgramadas = () => {
     
     try {
       // 1. Calcular cuál fue el mes anterior
-      const fecha = new Date();
-      fecha.setMonth(fecha.getMonth() - 1);
-      const mesPasado = fecha.getMonth() + 1; // getMonth() es 0-11
-      const anioPasado = fecha.getFullYear();
+      const partesFechaEcuador = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Guayaquil",
+        month: "numeric",
+        year: "numeric"
+      }).formatToParts(new Date());
+      const mesActualEcuador = Number(partesFechaEcuador.find((part) => part.type === "month")?.value || 1);
+      const anioActualEcuador = Number(partesFechaEcuador.find((part) => part.type === "year")?.value || new Date().getFullYear());
+      const mesPasado = mesActualEcuador === 1 ? 12 : mesActualEcuador - 1;
+      const anioPasado = mesActualEcuador === 1 ? anioActualEcuador - 1 : anioActualEcuador;
 
       // 2. Sumar todas las ventas 'pagadas' agrupadas por negocio
       const [ventas] = await db.query(
         `SELECT negocio_id, COUNT(id) as pedidos, SUM(total) as total_recaudado
          FROM ordenes 
          WHERE estado = 'pagado' 
-         AND MONTH(fecha_creacion) = ? 
-         AND YEAR(fecha_creacion) = ?
+         AND MONTH(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00')) = ? 
+         AND YEAR(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00')) = ?
          GROUP BY negocio_id`,
         [mesPasado, anioPasado]
       );
@@ -37,6 +42,8 @@ const iniciarTareasProgramadas = () => {
     } catch (error) {
       console.error("❌ [CRON] Error generando reportes:", error);
     }
+  }, {
+    timezone: "America/Guayaquil"
   });
 };
 

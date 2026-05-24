@@ -60,7 +60,7 @@ exports.webhookConfirmacion = async (req, res) => {
     }
 
     await db.query(
-      `UPDATE ordenes SET estado = 'pagado', fecha_pago = NOW() WHERE id = ?`,
+      `UPDATE ordenes SET estado = 'pagado', fecha_pago = UTC_TIMESTAMP() WHERE id = ?`,
       [id_orden]
     );
 

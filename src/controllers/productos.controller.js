@@ -177,6 +177,62 @@ const normalizarTexto = (texto = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
+const esConsultaFueraDeComercio = (texto = "") => {
+  const original = texto.toString().toLowerCase();
+  const normalizado = normalizarTexto(texto);
+  const terminosDeComercio = [
+    "producto",
+    "negocio",
+    "comercio",
+    "local",
+    "tienda",
+    "catalogo",
+    "comprar",
+    "pedido",
+    "orden",
+    "carrito",
+    "precio",
+    "costo",
+    "pago",
+    "payphone",
+    "efectivo",
+    "tarjeta",
+    "delivery",
+    "envio",
+    "domicilio",
+    "retiro",
+    "stock",
+    "inventario",
+    "categoria",
+    "cliente",
+    "vendedor",
+    "qr",
+    "correo",
+    "telefono",
+    "ubicacion",
+    "horario",
+    "app",
+    "plataforma",
+    "cuenta",
+    "login",
+    "registro",
+    "contrasena",
+    "jipijapa"
+  ];
+
+  const tieneTerminoComercial = terminosDeComercio.some((termino) =>
+    normalizado.includes(termino)
+  );
+
+  const patronesFueraDeTema = [
+    /\b(cu[aá]nto|cuanto|calcula|resolver|resultado)\b.*\d+\s*[\+\-\*x/]\s*\d+/i,
+    /\d+\s*[\+\-\*x/]\s*\d+/,
+    /\b(capital de|clima|deporte|programa|codigo|historia de|chiste|poema|traduce|noticia)\b/i
+  ];
+
+  return !tieneTerminoComercial && patronesFueraDeTema.some((patron) => patron.test(original));
+};
+
 const singularizarToken = (token = "") => {
   if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
   if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
@@ -775,10 +831,11 @@ const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
             {
               text: [
                 "Eres un asistente virtual amigable de un marketplace local.",
-                "Tu trabajo es conversar naturalmente con el usuario, como un chat libre, y decidir si el mensaje requiere buscar productos en el catalogo o si solo corresponde responder como chat.",
-                "Por defecto, prioriza una conversacion natural. NO conviertas cualquier frase en una busqueda.",
+                "Tu trabajo es ayudar solo con productos, negocios, pedidos, pagos, delivery, inventario y uso de la app.",
+                "No actues como chat libre para temas generales. Si el mensaje no pertenece al comercio o la app, marca tipo='conversacion' para responder con una redireccion breve al alcance permitido.",
+                "Por defecto, prioriza una conversacion natural dentro del alcance comercial. NO conviertas cualquier frase en una busqueda.",
                 "Solo marca tipo='busqueda' cuando el usuario realmente este pidiendo, buscando, comparando o preguntando por un producto o comercio.",
-                "Si el usuario saluda, agradece, duda, conversa, bromea, pide compañia, pregunta como estas o quiere hablar, responde como conversacion y NO fuerces una busqueda.",
+                "Si el usuario saluda o agradece, responde como conversacion y mantente dentro del contexto de la app. Si bromea, pide compañia, pregunta cultura general, matematica o quiere hablar de temas ajenos, responde como conversacion fuera de alcance y NO fuerces una busqueda.",
                 "Si el usuario pide un producto o pregunta en que negocio lo venden, marca tipo='busqueda' y extrae solo productos concretos y cortos, sin relleno como 'un poco de', 'por favor' o frases sociales.",
                 "No inventes resultados del catalogo en esta etapa. Solo interpreta la intencion.",
                 "Usa tipo='conversacion' o tipo='busqueda'.",
@@ -856,19 +913,20 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
             {
               text: [
                 "Eres un asistente virtual amable y natural dentro de un marketplace local.",
-                "Cuando el usuario no este haciendo una busqueda de productos, responde como una persona conversando con naturalidad.",
-                "Habla como un chatbot libre, cercano y humano, sin sonar robotico, sin repetir plantillas y sin listar capacidades a cada rato.",
-                "Responde primero a lo que el usuario dijo. No cambies de tema ni lo redirijas a productos a menos que el usuario lo pida.",
-                "Si el usuario saluda, bromea, pregunta algo personal como si eres una IA, dice que quiere hablar, pide una sugerencia general o simplemente conversa, responde como chat normal.",
-                "No cierres cada respuesta con frases como 'puedo ayudarte a buscar productos' salvo que de verdad venga al caso.",
+                "Solo puedes responder sobre productos, negocios, pedidos, pagos, delivery, inventario y uso de la app.",
+                "Si el usuario pregunta algo fuera de ese alcance, no respondas el contenido. Di brevemente que solo puedes ayudar con comercio, negocios o la app.",
+                "Cuando el usuario no este haciendo una busqueda de productos pero siga dentro del alcance, responde con naturalidad.",
+                "Responde primero a lo que el usuario dijo, siempre dentro del alcance permitido.",
+                "Si el usuario saluda o pregunta por ti, responde corto y orientado a la plataforma.",
+                "No cierres cada respuesta con frases repetidas salvo que venga al caso.",
                 "Puedes hacer preguntas de seguimiento cortas y naturales cuando ayuden a continuar la conversacion.",
                 "Mantente amable, breve y calido. Normalmente responde en 1 a 3 oraciones.",
                 "No inventes disponibilidad de productos ni negocios si no te dieron datos reales del catalogo.",
                 "Ejemplos de tono:",
                 "- Usuario: 'eres una ia?'",
-                "  Respuesta: 'Si, soy una IA, pero podemos hablar normal. Que te provoca conversar?'",
-                "- Usuario: 'solo quiero hablar contigo'",
-                "  Respuesta: 'Claro, hablemos un rato. Que tienes en mente?'",
+                "  Respuesta: 'Si, soy el asistente de esta plataforma. Te puedo ayudar con productos, negocios, pedidos o pagos.'",
+                "- Usuario: 'cuanto es 2*4?'",
+                "  Respuesta: 'Puedo ayudarte solo con temas del comercio, negocios, productos, pedidos, pagos, delivery, inventario o uso de la app.'",
                 "- Usuario: 'dame una sugerencia'",
                 "  Respuesta: 'Claro. Te doy una sugerencia de que tipo: para comer, para comprar o para pasar el rato?'",
                 "- Usuario: 'amigo'",
@@ -1192,6 +1250,23 @@ exports.buscarInteligente = async (req, res) => {
 
     if (!consulta) {
       return res.status(400).json({ ok: false, message: "Debes enviar una consulta" });
+    }
+
+    if (esConsultaFueraDeComercio(consulta)) {
+      return res.json({
+        ok: true,
+        modo: "fuera_de_tema",
+        consulta,
+        items_detectados: [],
+        respuesta_chat:
+          "Puedo ayudarte solo con temas del comercio, negocios, productos, pedidos, pagos, delivery, inventario o uso de la app.",
+        resumen_consulta: null,
+        resumen_ia: null,
+        distribucion_por_item: [],
+        recomendacion_principal: null,
+        alternativas: [],
+        sugerencias: []
+      });
     }
 
     const consultaNormalizada = normalizarTexto(consulta);

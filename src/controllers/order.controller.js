@@ -69,8 +69,8 @@ const crearOrden = async (req, res) => {
     const [ordenResult] = await connection.query(
       `INSERT INTO ordenes
       (usuario_id, negocio_id, total, tipo_entrega, ciudad_destino,
-       direccion_envio, estado, metodo_pago)
-      VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
+       direccion_envio, estado, metodo_pago, fecha_creacion)
+      VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?, UTC_TIMESTAMP())`,
       [usuario_id, negocio_id, total, tipo_entrega, ciudad_destino || null, direccion_envio || null, metodo_pago]
     );
 
@@ -118,7 +118,7 @@ const ordenesCliente = async (req, res) => {
   try {
     const usuario_id = req.user.id_usuario;
     const [rows] = await db.query(
-      `SELECT id, total, estado, fecha_creacion
+      `SELECT id, total, estado, DATE_FORMAT(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion
        FROM ordenes
        WHERE usuario_id = ?
        ORDER BY fecha_creacion DESC`,
@@ -220,13 +220,24 @@ const ordenesNegocio = async (req, res) => {
     const usuario_id = req.user.id_usuario;
     // 🔥 Filtramos para que por defecto solo vea lo del mes actual
     const [rows] = await db.query(
-      `SELECT o.*, u.nombre AS cliente
+      `SELECT o.id,
+              o.usuario_id,
+              o.negocio_id,
+              o.total,
+              o.tipo_entrega,
+              o.ciudad_destino,
+              o.direccion_envio,
+              o.estado,
+              o.metodo_pago,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_pago, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_pago,
+              u.nombre AS cliente
        FROM ordenes o
        JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
        WHERE n.usuario_id = ? 
-       AND MONTH(o.fecha_creacion) = MONTH(CURRENT_DATE())
-       AND YEAR(o.fecha_creacion) = YEAR(CURRENT_DATE())
+       AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = MONTH(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00'))
+       AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = YEAR(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-05:00'))
        ORDER BY o.fecha_creacion DESC`,
       [usuario_id]
     );
@@ -246,7 +257,17 @@ const detalleOrden = async (req, res) => {
 
     // 1. Buscamos la orden con los datos del dueño del negocio
     const [ordenRows] = await db.query(
-      `SELECT o.*, 
+      `SELECT o.id,
+              o.usuario_id,
+              o.negocio_id,
+              o.total,
+              o.tipo_entrega,
+              o.ciudad_destino,
+              o.direccion_envio,
+              o.estado,
+              o.metodo_pago,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_pago, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_pago,
               u.nombre AS cliente_nombre,
               n.nombre_negocio AS negocio_nombre,
               n.usuario_id AS negocio_dueno
@@ -318,7 +339,17 @@ const detalleOrdenNegocio = async (req, res) => {
     const user = req.user; 
 
     const [ordenRows] = await db.query(
-      `SELECT o.*, 
+      `SELECT o.id,
+              o.usuario_id,
+              o.negocio_id,
+              o.total,
+              o.tipo_entrega,
+              o.ciudad_destino,
+              o.direccion_envio,
+              o.estado,
+              o.metodo_pago,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_pago, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_pago,
               u.nombre AS cliente_nombre,
               n.nombre_negocio AS negocio_nombre,
               n.usuario_id AS negocio_dueno
@@ -376,13 +407,13 @@ const obtenerHistorialMes = async (req, res) => {
     const usuario_id = req.user.id_usuario;
 
     const [rows] = await db.query(
-      `SELECT o.id, o.total, o.estado, o.fecha_creacion, u.nombre AS cliente
+      `SELECT o.id, o.total, o.estado, DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion, u.nombre AS cliente
        FROM ordenes o
        JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
        WHERE n.usuario_id = ? 
-       AND MONTH(o.fecha_creacion) = ? 
-       AND YEAR(o.fecha_creacion) = ?
+       AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ? 
+       AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
        ORDER BY o.fecha_creacion DESC`,
       [usuario_id, mes, anio]
     );

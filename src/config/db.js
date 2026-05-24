@@ -9,7 +9,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  timezone: '-05:00', 
+  timezone: 'Z',
 
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
@@ -19,7 +19,7 @@ const pool = mysql.createPool({
 const testConnection = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log("✅ Base de datos conectada correctamente (Zona Horaria UTC-5)");
+    console.log("Base de datos conectada correctamente (fechas guardadas en UTC)");
     connection.release();
   } catch (error) {
     console.error("❌ Error al conectar a la base de datos:", error.message);

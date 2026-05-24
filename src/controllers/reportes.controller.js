@@ -1,6 +1,51 @@
 const db = require("../config/db");
 const PDFDocument = require('pdfkit');
 
+const formatNumber = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '0';
+  return new Intl.NumberFormat('es-EC', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(numericValue);
+};
+
+const formatMoney = (value) => `$${formatNumber(value)}`;
+const SQL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::\d{2})?$/;
+
+const parseSqlLocalDateTime = (value) => {
+  if (typeof value !== 'string') return null;
+  const match = value.match(SQL_DATE_TIME_PATTERN);
+  if (!match) return null;
+  return {
+    year: match[1],
+    month: match[2],
+    day: match[3],
+    hour: match[4],
+    minute: match[5]
+  };
+};
+
+const formatEcuadorDate = (value) =>
+  parseSqlLocalDateTime(value)
+    ? `${parseSqlLocalDateTime(value).day}/${parseSqlLocalDateTime(value).month}/${parseSqlLocalDateTime(value).year}`
+    : new Intl.DateTimeFormat('es-EC', {
+    timeZone: 'America/Guayaquil',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(new Date(value));
+
+const formatEcuadorTime = (value) =>
+  parseSqlLocalDateTime(value)
+    ? `${parseSqlLocalDateTime(value).hour}:${parseSqlLocalDateTime(value).minute}`
+    : new Intl.DateTimeFormat('es-EC', {
+    timeZone: 'America/Guayaquil',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(new Date(value));
+
 exports.generarPDF = async (req, res) => {
   try {
     const { mes, anio } = req.query;
@@ -8,11 +53,11 @@ exports.generarPDF = async (req, res) => {
 
     // 1. Validar que existan ventas en ese mes para ese negocio (Pagadas o Entregadas)
     const [ventas] = await db.query(
-      `SELECT o.id, o.total, o.fecha_creacion, u.nombre AS cliente, o.metodo_pago
+      `SELECT o.id, o.total, DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion, u.nombre AS cliente, o.metodo_pago
        FROM ordenes o
        JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
-       WHERE n.usuario_id = ? AND MONTH(o.fecha_creacion) = ? AND YEAR(o.fecha_creacion) = ?
+       WHERE n.usuario_id = ? AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ? AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
        AND o.estado IN ('pagado', 'entregado')
        ORDER BY o.fecha_creacion ASC`,
       [usuario_id, mes, anio]
@@ -29,7 +74,7 @@ exports.generarPDF = async (req, res) => {
        JOIN ordenes o ON d.orden_id = o.id
        JOIN productos p ON d.producto_id = p.id
        JOIN negocios n ON n.id = o.negocio_id
-       WHERE n.usuario_id = ? AND MONTH(o.fecha_creacion) = ? AND YEAR(o.fecha_creacion) = ?
+       WHERE n.usuario_id = ? AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ? AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
        AND o.estado IN ('pagado', 'entregado')
        GROUP BY p.id
        ORDER BY total_vendido DESC
@@ -57,9 +102,9 @@ exports.generarPDF = async (req, res) => {
     doc.moveDown(0.5);
     doc.fontSize(11).font('Helvetica');
     doc.text(`Total de Órdenes Completadas: ${ventas.length}`);
-    doc.text(`Ingresos en Efectivo: $${ingresosEfectivo.toFixed(2)}`);
-    doc.text(`Ingresos por Tarjeta (PayPhone): $${ingresosTarjeta.toFixed(2)}`);
-    doc.font('Helvetica-Bold').text(`Ingresos Totales: $${totalIngresos.toFixed(2)}`);
+    doc.text(`Ingresos en Efectivo: ${formatMoney(ingresosEfectivo)}`);
+    doc.text(`Ingresos por Tarjeta (PayPhone): ${formatMoney(ingresosTarjeta)}`);
+    doc.font('Helvetica-Bold').text(`Ingresos Totales: ${formatMoney(totalIngresos)}`);
     doc.moveDown(2);
 
     // === TOP PRODUCTOS ===
@@ -83,8 +128,8 @@ exports.generarPDF = async (req, res) => {
     // Definimos las posiciones X fijas de cada columna para que jamás se descuadren
     const colIdX = 50;
     const colFechaX = 90;
-    const colClienteX = 190;
-    const colTotalX = 380;
+    const colClienteX = 220;
+    const colTotalX = 385;
     const colMetodoX = 470;
 
     let tableHeaderY = doc.y;
@@ -92,9 +137,9 @@ exports.generarPDF = async (req, res) => {
     // Pintamos las cabeceras de la tabla
     doc.fontSize(10).font('Helvetica-Bold');
     doc.text('ID', colIdX, tableHeaderY, { width: 35 });
-    doc.text('Fecha', colFechaX, tableHeaderY, { width: 90 });
-    doc.text('Cliente', colClienteX, tableHeaderY, { width: 180 });
-    doc.text('Total', colTotalX, tableHeaderY, { width: 80, align: 'right' });
+    doc.text('Fecha/Hora EC', colFechaX, tableHeaderY, { width: 120 });
+    doc.text('Cliente', colClienteX, tableHeaderY, { width: 150 });
+    doc.text('Total', colTotalX, tableHeaderY, { width: 75, align: 'right' });
     doc.text('Método', colMetodoX, tableHeaderY, { width: 80, align: 'right' });
 
     // Línea divisoria de la cabecera
@@ -111,13 +156,13 @@ exports.generarPDF = async (req, res) => {
         currentY = 50; // Reiniciamos arriba en la nueva hoja
       }
 
-      const fecha = new Date(v.fecha_creacion).toLocaleDateString();
+      const fecha = `${formatEcuadorDate(v.fecha_creacion)} ${formatEcuadorTime(v.fecha_creacion)} EC`;
 
       // Forzamos a que todas las celdas de esta fila se pinten exactamente en el mismo "currentY"
       doc.text(`#${v.id}`, colIdX, currentY, { width: 35 });
-      doc.text(fecha, colFechaX, currentY, { width: 90 });
-      doc.text(v.cliente, colClienteX, currentY, { width: 180 });
-      doc.text(`$${Number(v.total).toFixed(2)}`, colTotalX, currentY, { width: 80, align: 'right' });
+      doc.text(fecha, colFechaX, currentY, { width: 120 });
+      doc.text(v.cliente, colClienteX, currentY, { width: 150 });
+      doc.text(formatMoney(v.total), colTotalX, currentY, { width: 75, align: 'right' });
       doc.text(v.metodo_pago.toUpperCase(), colMetodoX, currentY, { width: 80, align: 'right' });
 
       // Avanzamos 22 puntos limpiamente hacia la siguiente fila

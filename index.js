@@ -1,4 +1,5 @@
 require("dotenv").config();
+process.env.TZ = "America/Guayaquil";
 const app = require("./src/app");
 const http = require("http");
 const { Server } = require("socket.io");
