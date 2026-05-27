@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { enviarVerificacion, enviarRecuperacion } = require("../utils/mailer");
 const validarCedulaEcuatoriana = require("../utils/validarCedula");
+const { getFrontendUrl } = require("../config/cors");
 
 // =====================
 // REGISTRO
@@ -43,7 +44,7 @@ const registro = async (req, res) => {
       [nombre, cedula, email, hash, rol, tokenVerificacion]
     );
 
-    const link = `${process.env.FRONTEND_URL}/verificar?token=${tokenVerificacion}`;
+    const link = `${getFrontendUrl()}/verificar?token=${tokenVerificacion}`;
 
     enviarVerificacion(email, link)
       .then(() => console.log("Correo enviado"))
@@ -178,7 +179,7 @@ const solicitarRecuperacion = async (req, res) => {
       [tokenRecuperacion, expiracion, user.id]
     );
 
-    const link = `${process.env.FRONTEND_URL}/restablecer-password?token=${tokenRecuperacion}`;
+    const link = `${getFrontendUrl()}/restablecer-password?token=${tokenRecuperacion}`;
 
     await enviarRecuperacion(email, link)
       .then(() => console.log("Correo de recuperación enviado"))

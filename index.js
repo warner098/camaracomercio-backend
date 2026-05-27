@@ -3,6 +3,7 @@ process.env.TZ = "America/Guayaquil";
 const app = require("./src/app");
 const http = require("http");
 const { Server } = require("socket.io");
+const { getAllowedOrigins } = require("./src/config/cors");
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,8 +13,8 @@ const server = http.createServer(app);
 // 2. Configuramos Socket.io
 const io = new Server(server, {
   cors: {
-    origin: ["https://transcendent-axolotl-727785.netlify.app", "http://localhost:5173", "http://127.0.0.1:5173"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: getAllowedOrigins(),
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true
   }
 });

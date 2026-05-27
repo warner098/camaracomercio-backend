@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const axios = require("axios"); 
+const { getFrontendUrl } = require("../config/cors");
 
 exports.linkPayphone = async (req, res) => {
   try {
@@ -12,7 +13,7 @@ exports.linkPayphone = async (req, res) => {
     }
 
     // Definimos la base de la URL del frontend (Netlify en producción o localhost en desarrollo)
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const baseUrl = getFrontendUrl();
 
     const response = await axios.post(
       "https://pay.payphonetodoesposible.com/api/button/Prepare",

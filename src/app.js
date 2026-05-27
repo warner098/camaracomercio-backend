@@ -1,13 +1,14 @@
 const express = require("express");
 const cors = require("cors");
 const iniciarTareasProgramadas = require("./utils/cron");
+const { corsOrigin } = require("./config/cors");
 
 const app = express();
 
 // Middlewares globales
 app.use(cors({
-  origin: ['https://transcendent-axolotl-727785.netlify.app', 'http://localhost:5173', 'http://127.0.0.1:5173'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: corsOrigin,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
 app.use(express.json());
