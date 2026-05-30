@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const axios = require("axios"); 
 const { getFrontendUrl } = require("../config/cors");
+const { asegurarCodigoOrdenSchema, normalizarIdentificadorOrden } = require("../utils/orderCodes");
 
 exports.linkPayphone = async (req, res) => {
   try {
@@ -49,6 +50,7 @@ exports.webhookConfirmacion = async (req, res) => {
     const transactionId = req.body.transactionId; // PayPhone envía esto
 
     if (!id_orden || !transactionId) return res.status(400).send("Faltan datos");
+    await asegurarCodigoOrdenSchema();
 
     // Validar con la API de PayPhone que el pago es real y está "Approved"
     const response = await axios.get(
@@ -60,9 +62,12 @@ exports.webhookConfirmacion = async (req, res) => {
       return res.status(400).send("Transacción no aprobada");
     }
 
+    const { codigo, idNumerico } = normalizarIdentificadorOrden(id_orden);
     await db.query(
-      `UPDATE ordenes SET estado = 'pagado', fecha_pago = UTC_TIMESTAMP() WHERE id = ?`,
-      [id_orden]
+      `UPDATE ordenes
+       SET estado = 'pagado', fecha_pago = UTC_TIMESTAMP()
+       WHERE codigo_orden = ? OR id = ?`,
+      [codigo, idNumerico]
     );
 
     return res.status(200).send("OK");

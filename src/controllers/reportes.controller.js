@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const PDFDocument = require('pdfkit');
+const { asegurarCodigoOrdenSchema, codigoPublicoOrden } = require("../utils/orderCodes");
 
 const formatNumber = (value) => {
   const numericValue = Number(value);
@@ -51,9 +52,11 @@ exports.generarPDF = async (req, res) => {
     const { mes, anio } = req.query;
     const usuario_id = req.user.id_usuario;
 
+    await asegurarCodigoOrdenSchema();
+
     // 1. Validar que existan ventas en ese mes para ese negocio (Pagadas o Entregadas)
     const [ventas] = await db.query(
-      `SELECT o.id, o.total, DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion, u.nombre AS cliente, o.metodo_pago
+      `SELECT o.id, o.codigo_orden, o.total, DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion, u.nombre AS cliente, o.metodo_pago
        FROM ordenes o
        JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
@@ -127,20 +130,20 @@ exports.generarPDF = async (req, res) => {
 
     // Definimos las posiciones X fijas de cada columna para que jamás se descuadren
     const colIdX = 50;
-    const colFechaX = 90;
-    const colClienteX = 220;
-    const colTotalX = 385;
-    const colMetodoX = 470;
+    const colFechaX = 140;
+    const colClienteX = 265;
+    const colTotalX = 395;
+    const colMetodoX = 475;
 
     let tableHeaderY = doc.y;
 
     // Pintamos las cabeceras de la tabla
     doc.fontSize(10).font('Helvetica-Bold');
-    doc.text('ID', colIdX, tableHeaderY, { width: 35 });
-    doc.text('Fecha/Hora EC', colFechaX, tableHeaderY, { width: 120 });
-    doc.text('Cliente', colClienteX, tableHeaderY, { width: 150 });
-    doc.text('Total', colTotalX, tableHeaderY, { width: 75, align: 'right' });
-    doc.text('Método', colMetodoX, tableHeaderY, { width: 80, align: 'right' });
+    doc.text('Codigo', colIdX, tableHeaderY, { width: 80 });
+    doc.text('Fecha/Hora EC', colFechaX, tableHeaderY, { width: 115 });
+    doc.text('Cliente', colClienteX, tableHeaderY, { width: 120 });
+    doc.text('Total', colTotalX, tableHeaderY, { width: 70, align: 'right' });
+    doc.text('Metodo', colMetodoX, tableHeaderY, { width: 75, align: 'right' });
 
     // Línea divisoria de la cabecera
     doc.moveTo(50, tableHeaderY + 15).lineTo(550, tableHeaderY + 15).lineWidth(1).strokeColor('#cccccc').stroke();
@@ -159,11 +162,11 @@ exports.generarPDF = async (req, res) => {
       const fecha = `${formatEcuadorDate(v.fecha_creacion)} ${formatEcuadorTime(v.fecha_creacion)} EC`;
 
       // Forzamos a que todas las celdas de esta fila se pinten exactamente en el mismo "currentY"
-      doc.text(`#${v.id}`, colIdX, currentY, { width: 35 });
-      doc.text(fecha, colFechaX, currentY, { width: 120 });
-      doc.text(v.cliente, colClienteX, currentY, { width: 150 });
-      doc.text(formatMoney(v.total), colTotalX, currentY, { width: 75, align: 'right' });
-      doc.text(v.metodo_pago.toUpperCase(), colMetodoX, currentY, { width: 80, align: 'right' });
+      doc.text(`#${codigoPublicoOrden(v)}`, colIdX, currentY, { width: 80 });
+      doc.text(fecha, colFechaX, currentY, { width: 115 });
+      doc.text(v.cliente, colClienteX, currentY, { width: 120 });
+      doc.text(formatMoney(v.total), colTotalX, currentY, { width: 70, align: 'right' });
+      doc.text(v.metodo_pago.toUpperCase(), colMetodoX, currentY, { width: 75, align: 'right' });
 
       // Avanzamos 22 puntos limpiamente hacia la siguiente fila
       currentY += 22; 

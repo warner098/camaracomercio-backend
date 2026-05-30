@@ -194,6 +194,9 @@ const esConsultaFueraDeComercio = (texto = "") => {
     "precio",
     "costo",
     "pago",
+    "pagos",
+    "metodo",
+    "metodos",
     "payphone",
     "efectivo",
     "tarjeta",
@@ -217,6 +220,29 @@ const esConsultaFueraDeComercio = (texto = "") => {
     "login",
     "registro",
     "contrasena",
+    "solicitud",
+    "solicitudes",
+    "administrador",
+    "admin",
+    "configuracion",
+    "configurar",
+    "reporte",
+    "reportes",
+    "venta",
+    "ventas",
+    "escaner",
+    "cobrar",
+    "aprobar",
+    "rechazar",
+    "unidad",
+    "unidades",
+    "activar",
+    "desactivar",
+    "logo",
+    "portada",
+    "redes",
+    "whatsapp",
+    "telegram",
     "jipijapa"
   ];
 
@@ -551,10 +577,268 @@ const esConsultaCortaDeProducto = (consultaNormalizada = "", itemsTentativos = [
   return tokens.length > 0 && tokens.length <= 3;
 };
 
+const limpiarContextoUsuario = (contexto = {}) => {
+  const rol = ["cliente", "negocio", "admin"].includes(contexto?.rol)
+    ? contexto.rol
+    : "visitante";
+
+  return {
+    rol,
+    autenticado: Boolean(contexto?.autenticado),
+    estado_negocio:
+      contexto?.estado_negocio === 0 || contexto?.estado_negocio === "0"
+        ? 0
+        : contexto?.estado_negocio || null,
+    ruta: (contexto?.ruta || "").toString().slice(0, 120)
+  };
+};
+
+const crearSugerenciasAccion = (rol = "visitante", contexto = "general") => {
+  const comunes = [
+    { label: "Como puedo pagar?", query: "como puedo pagar?" },
+    { label: "Buscar un producto", query: "donde venden arroz?" },
+    { label: "Como funciona delivery?", query: "como funciona el delivery?" }
+  ];
+
+  const porRol = {
+    visitante: [
+      { label: "Como registrarme?", query: "como me registro?" },
+      { label: "Quiero ser negocio", query: "como puedo ser negocio?" }
+    ],
+    cliente: [
+      { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+      { label: "Ver mis pedidos", query: "como reviso mis pedidos?" }
+    ],
+    negocio: [
+      { label: "Configurar pagos", query: "como configuro PayPhone para mi negocio?" },
+      { label: "Gestionar productos", query: "como agrego o edito productos?" },
+      { label: "Cobrar efectivo", query: "como cobro pedidos en efectivo?" }
+    ],
+    admin: [
+      { label: "Revisar solicitudes", query: "como reviso solicitudes de negocios?" },
+      { label: "Configurar sistema", query: "que puedo configurar como admin?" },
+      { label: "Reportes", query: "como reviso reportes de ventas?" }
+    ]
+  };
+
+  const extrasCatalogo =
+    contexto === "catalogo"
+      ? [{ label: "Otra opcion", query: "dame otra opcion parecida" }]
+      : [];
+
+  return [...(porRol[rol] || porRol.visitante), ...extrasCatalogo, ...comunes].slice(0, 6);
+};
+
+const contienePalabraDeGrupo = (texto = "", palabras = []) =>
+  palabras.some((palabra) => texto.includes(palabra));
+
+const extraerTerminoNegocio = (consulta = "") => {
+  const texto = normalizarTexto(consulta);
+  const pistas = [
+    "informacion de",
+    "datos de",
+    "telefono de",
+    "ubicacion de",
+    "horario de",
+    "contacto de",
+    "redes de",
+    "donde queda",
+    "donde esta"
+  ];
+
+  if (!pistas.some((pista) => texto.includes(pista))) return "";
+
+  const limpio = pistas
+    .reduce((actual, pista) => actual.replace(pista, " "), texto)
+    .replace(/\b(negocio|local|tienda|comercio|quiero|saber|sobre|el|la|los|las|un|una|porfavor|porfa)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!limpio || limpio.length < 3) return "";
+  if (["negocio", "local", "tienda"].includes(limpio)) return "";
+  return limpio;
+};
+
+const buscarNegociosPorNombre = async (termino = "") => {
+  if (!termino) return [];
+
+  const [rows] = await pool.query(
+    `SELECT
+      n.id AS negocio_id,
+      n.nombre_negocio,
+      n.ubicacion,
+      n.telefono,
+      n.horarios,
+      n.descripcion,
+      n.logo,
+      GROUP_CONCAT(DISTINCT c.nombre SEPARATOR ', ') AS categoria
+    FROM negocios n
+    LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
+    LEFT JOIN categorias c ON c.id_categoria = nc.categoria_id
+    WHERE n.estado = 1
+      AND LOWER(n.nombre_negocio) LIKE LOWER(?)
+    GROUP BY
+      n.id,
+      n.nombre_negocio,
+      n.ubicacion,
+      n.telefono,
+      n.horarios,
+      n.descripcion,
+      n.logo
+    LIMIT 5`,
+    [`%${termino}%`]
+  );
+
+  return rows;
+};
+
+const construirRespuestaNegocio = (negocios = [], termino = "") => {
+  if (!negocios.length) {
+    return `No encontre un negocio activo que coincida con "${termino}". Prueba con parte del nombre o revisa Explorar Negocios.`;
+  }
+
+  const principal = negocios[0];
+  const datos = [
+    principal.ubicacion ? `ubicacion: ${principal.ubicacion}` : null,
+    principal.telefono ? `telefono: ${principal.telefono}` : null,
+    principal.horarios ? `horario: ${principal.horarios}` : null,
+    principal.categoria ? `categorias: ${principal.categoria}` : null
+  ].filter(Boolean);
+
+  const extras = negocios.length > 1
+    ? ` Tambien encontre ${negocios.slice(1).map((negocio) => negocio.nombre_negocio).join(", ")}.`
+    : "";
+
+  return `Encontre ${principal.nombre_negocio}${datos.length ? ` (${datos.join("; ")})` : ""}.${extras} Puedes abrir el negocio para ver sus productos y mas detalles.`;
+};
+
+const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
+  const texto = normalizarTexto(consulta);
+  const rol = userContext.rol || "visitante";
+  const estaAutenticado = userContext.autenticado;
+  const esNegocioOAdmin = rol === "negocio" || rol === "admin";
+
+  const respuesta = (mensaje, sugerencias = crearSugerenciasAccion(rol)) => ({
+    respuesta_chat: mensaje,
+    sugerencias_accion: sugerencias
+  });
+
+  if (contienePalabraDeGrupo(texto, ["metodo de pago", "metodos de pago", "como puedo pagar", "como pago", "pagar", "pago", "payphone", "tarjeta", "efectivo"])) {
+    const notaNegocio = esNegocioOAdmin
+      ? " Para tu negocio, configura PayPhone desde Configurar Negocio si quieres aceptar tarjeta; los pagos en efectivo se confirman con el flujo de cobro/QR."
+      : "";
+
+    return respuesta(
+      `Los metodos dependen de cada negocio. En el carrito normalmente puedes pagar en efectivo y, si ese negocio tiene PayPhone configurado, tambien con tarjeta. Primero agregas productos, eliges retiro o delivery si esta disponible, y luego escoges el metodo que aparezca habilitado.${notaNegocio}`,
+      [
+        { label: "Que es PayPhone?", query: "que es PayPhone en la plataforma?" },
+        { label: "Como compro?", query: "como hago una compra?" },
+        { label: "Delivery", query: "como funciona el delivery?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["ser negocio", "abrir negocio", "crear negocio", "solicitar negocio", "vender aqui", "hacerme negocio"])) {
+    if (rol === "negocio" || rol === "admin") {
+      return respuesta(
+        "Ya tienes acceso a las opciones de negocio. Desde el menu puedes entrar al panel, gestionar productos, configurar pagos/delivery y revisar ventas.",
+        crearSugerenciasAccion(rol)
+      );
+    }
+
+    const inicio = estaAutenticado
+      ? "En el menu lateral entra en Abrir Negocio y llena la solicitud con datos, ubicacion y categorias."
+      : "Primero debes registrarte o iniciar sesion. Luego veras la opcion Abrir Negocio en el menu lateral.";
+
+    return respuesta(
+      `${inicio} Un administrador revisa la solicitud; si la aprueba, tu cuenta pasa a rol negocio y se habilita tu panel.`,
+      [
+        { label: "Que datos piden?", query: "que datos necesito para solicitar un negocio?" },
+        { label: "Como comprar?", query: "como hago una compra?" },
+        { label: "Buscar negocios", query: "como busco negocios?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["configurar mi negocio", "configuracion del negocio", "configurar negocio", "payphone para mi negocio", "delivery para mi negocio", "agregar producto", "editar producto", "inventario", "stock"])) {
+    if (!esNegocioOAdmin) {
+      return respuesta(
+        "Esas opciones son para cuentas con rol negocio. Si quieres vender en la plataforma, puedes enviar una solicitud desde Abrir Negocio.",
+        [
+          { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+          { label: "Como comprar?", query: "como hago una compra?" }
+        ]
+      );
+    }
+
+    return respuesta(
+      "Como negocio puedes usar Mi Negocio para ver pedidos, Productos para crear o editar inventario, Configurar Negocio para PayPhone/delivery/datos de contacto, Historial y Reportes para ventas, y Cobrar Efectivo para escanear el QR del cliente.",
+      crearSugerenciasAccion(rol)
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["admin", "administrador", "solicitudes", "aprobar negocios", "rechazar negocios", "configurar sistema", "categorias", "unidades"])) {
+    if (rol !== "admin") {
+      return respuesta(
+        "Las opciones de administrador solo aparecen para cuentas admin. Un admin puede revisar solicitudes de negocios y ajustar categorias o unidades del sistema.",
+        crearSugerenciasAccion(rol)
+      );
+    }
+
+    return respuesta(
+      "Como admin puedes revisar solicitudes de negocios, aprobar o rechazar solicitudes, configurar categorias y unidades, y tambien entrar a modulos de negocio para supervisar productos, pedidos y reportes.",
+      crearSugerenciasAccion("admin")
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["mis pedidos", "estado de pedido", "pedido", "orden", "carrito", "como compro", "como comprar", "hacer una compra", "proceso de compra"])) {
+    return respuesta(
+      "Para comprar, entra a un negocio, agrega productos al carrito y luego confirma entrega y pago. Para revisar el estado, usa Mis Compras/Mis Pedidos; ahi tambien puedes ver detalles y el QR si aplica.",
+      [
+        { label: "Como pagar?", query: "como puedo pagar?" },
+        { label: "Delivery", query: "como funciona el delivery?" },
+        { label: "Buscar producto", query: "donde venden arroz?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["delivery", "envio", "domicilio", "retiro", "entrega"])) {
+    return respuesta(
+      "El delivery depende de cada negocio. Si el negocio lo tiene activo, en el carrito podras elegir entrega a domicilio y se sumara el costo indicado; si no, la compra queda para retiro o el metodo disponible.",
+      [
+        { label: "Como pagar?", query: "como puedo pagar?" },
+        { label: "Como comprar?", query: "como hago una compra?" },
+        { label: "Buscar negocio", query: "quiero informacion de un negocio" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["qr", "codigo qr", "escaner", "cobrar efectivo", "cobro efectivo"])) {
+    return respuesta(
+      "El QR sirve para confirmar pagos o entregas en efectivo. El cliente puede mostrar el QR desde su pedido y el negocio lo escanea desde Cobrar Efectivo o el escaner del panel.",
+      crearSugerenciasAccion(rol)
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["informacion de un negocio", "negocio especifico", "datos de un negocio", "telefono de", "ubicacion de", "horario de"])) {
+    return respuesta(
+      "Claro. Dime el nombre del negocio o entra a su perfil desde Explorar Negocios; ahi puedes ver ubicacion, telefono, horarios, redes y productos activos.",
+      [
+        { label: "Buscar producto", query: "donde venden arroz?" },
+        { label: "Como contacto un negocio?", query: "como contacto a un negocio?" },
+        { label: "Como comprar?", query: "como hago una compra?" }
+      ]
+    );
+  }
+
+  return null;
+};
+
 const construirRespuestaConversacional = ({
   consulta,
   history = [],
-  tipo = "general"
+  tipo = "general",
+  userContext = {}
 }) => {
   const consultaNormalizada = normalizarTexto(consulta);
   const contextoItems = obtenerUltimosItemsDelHistorial(history);
@@ -573,7 +857,14 @@ const construirRespuestaConversacional = ({
   }
 
   if (tipo === "saludo") {
-    return "Hola, aqui estoy para ayudarte. Puedes preguntarme por productos, por un negocio en concreto o simplemente decirme que no sabes que pedir y te acompaño a decidir.";
+    const sugerenciaRol =
+      userContext.rol === "negocio"
+        ? " Tambien puedo orientarte con productos, pedidos, pagos o reportes de tu negocio."
+        : userContext.rol === "admin"
+        ? " Tambien puedo orientarte con solicitudes, configuracion del sistema y reportes."
+        : " Puedes preguntarme por productos, pagos, pedidos o como abrir un negocio.";
+
+    return `Hola, aqui estoy para ayudarte.${sugerenciaRol}`;
   }
 
   if (tipo === "charla") {
@@ -588,7 +879,7 @@ const construirRespuestaConversacional = ({
     return "Estoy aqui para ayudarte. Puedes preguntarme por productos, negocios o pedirme una sugerencia.";
   }
 
-  return "Te ayudo con gusto. Cuentame que producto buscas o que necesitas comprar y lo reviso contigo.";
+  return "Te ayudo con gusto. Puedes preguntarme por productos, negocios, pagos, pedidos, delivery o por como usar tu panel segun tu rol.";
 };
 
 const construirRespuestaChat = ({
@@ -778,7 +1069,7 @@ const consultarOpenAIParaRanking = async ({ consulta, items, candidatos, sugeren
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
-      timeout: 30000
+      timeout: 8000
     }
   );
 
@@ -801,7 +1092,7 @@ const extraerTextoGemini = (response = {}) => {
   return textos.join("\n").trim();
 };
 
-const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
+const consultarGeminiParaIntencion = async ({ consulta, history = [], userContext = {} }) => {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
@@ -832,6 +1123,7 @@ const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
               text: [
                 "Eres un asistente virtual amigable de un marketplace local.",
                 "Tu trabajo es ayudar solo con productos, negocios, pedidos, pagos, delivery, inventario y uso de la app.",
+                "Tambien debes reconocer preguntas de ayuda de la plataforma: metodos de pago, como comprar, como ser negocio, configuracion de negocio, solicitudes y opciones de admin.",
                 "No actues como chat libre para temas generales. Si el mensaje no pertenece al comercio o la app, marca tipo='conversacion' para responder con una redireccion breve al alcance permitido.",
                 "Por defecto, prioriza una conversacion natural dentro del alcance comercial. NO conviertas cualquier frase en una busqueda.",
                 "Solo marca tipo='busqueda' cuando el usuario realmente este pidiendo, buscando, comparando o preguntando por un producto o comercio.",
@@ -846,6 +1138,10 @@ const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
                 "- 'cuentame algo' => tipo='conversacion'",
                 "- 'eres una ia?' => tipo='conversacion'",
                 "- 'dame una sugerencia' => tipo='conversacion'",
+                "- 'como puedo pagar?' => tipo='conversacion'",
+                "- 'como son los metodos de pago?' => tipo='conversacion'",
+                "- 'como puedo ser negocio?' => tipo='conversacion'",
+                "- 'como configuro PayPhone?' => tipo='conversacion'",
                 "- 'que me recomiendas?' => tipo='conversacion'",
                 "- 'quiero un poco de sal' => tipo='busqueda', items_detectados=['sal']",
                 "- 'pues quiero pollo' => tipo='busqueda', items_detectados=['pollo']",
@@ -854,6 +1150,7 @@ const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
                 JSON.stringify(
                   {
                     consulta,
+                    user_context: userContext,
                     historial: history.slice(-6)
                   },
                   null,
@@ -881,7 +1178,7 @@ const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
         "Content-Type": "application/json",
         "x-goog-api-key": geminiApiKey
       },
-      timeout: 30000
+      timeout: 8000
     }
   );
 
@@ -893,7 +1190,7 @@ const consultarGeminiParaIntencion = async ({ consulta, history = [] }) => {
   return JSON.parse(texto);
 };
 
-const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
+const consultarGeminiParaConversacion = async ({ consulta, history = [], userContext = {} }) => {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
@@ -902,6 +1199,9 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
   }
 
   const historial = formatearHistorialParaPrompt(history);
+  const contextoUsuario = `Rol del usuario: ${userContext.rol || "visitante"}. Autenticado: ${
+    userContext.autenticado ? "si" : "no"
+  }. Ruta actual: ${userContext.ruta || "no indicada"}.`;
 
   const response = await axios.post(
     `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
@@ -916,6 +1216,12 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
                 "Solo puedes responder sobre productos, negocios, pedidos, pagos, delivery, inventario y uso de la app.",
                 "Si el usuario pregunta algo fuera de ese alcance, no respondas el contenido. Di brevemente que solo puedes ayudar con comercio, negocios o la app.",
                 "Cuando el usuario no este haciendo una busqueda de productos pero siga dentro del alcance, responde con naturalidad.",
+                "No respondas con una frase generica de busqueda cuando el usuario pregunte como usar la plataforma. Primero explica la duda concreta.",
+                "Datos funcionales de la app:",
+                "- Clientes/visitantes: pueden explorar negocios, ver productos, registrarse, agregar productos al carrito, elegir retiro o delivery si el negocio lo ofrece, pagar en efectivo o con PayPhone/tarjeta si el negocio lo tiene configurado.",
+                "- Clientes autenticados: pueden ver Mis Compras/Mis Pedidos y solicitar abrir un negocio desde Abrir Negocio.",
+                "- Negocios: pueden ver pedidos, gestionar productos e inventario, configurar PayPhone/delivery/datos/redes, cobrar efectivo con QR y ver historial/reportes.",
+                "- Admin: puede revisar solicitudes, aprobar/rechazar negocios, configurar categorias/unidades y usar modulos de supervision.",
                 "Responde primero a lo que el usuario dijo, siempre dentro del alcance permitido.",
                 "Si el usuario saluda o pregunta por ti, responde corto y orientado a la plataforma.",
                 "No cierres cada respuesta con frases repetidas salvo que venga al caso.",
@@ -929,10 +1235,13 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
                 "  Respuesta: 'Puedo ayudarte solo con temas del comercio, negocios, productos, pedidos, pagos, delivery, inventario o uso de la app.'",
                 "- Usuario: 'dame una sugerencia'",
                 "  Respuesta: 'Claro. Te doy una sugerencia de que tipo: para comer, para comprar o para pasar el rato?'",
+                "- Usuario: 'como puedo pagar?'",
+                "  Respuesta: 'En el carrito veras los metodos que tenga activo cada negocio: efectivo y, si el negocio configuro PayPhone, tarjeta. Tambien eliges retiro o delivery si esta disponible.'",
                 "- Usuario: 'amigo'",
                 "  Respuesta: 'Aqui ando contigo. Que cuentas?'",
                 "- Usuario: 'hola como estas?'",
                 "  Respuesta: 'Hola, todo bien por aqui. Y tu como vas?'",
+                contextoUsuario,
                 historial ? `Historial reciente:\n${historial}` : "",
                 `Mensaje actual del usuario: ${consulta}`
               ]
@@ -958,7 +1267,7 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [] }) => {
         "Content-Type": "application/json",
         "x-goog-api-key": geminiApiKey
       },
-      timeout: 30000
+      timeout: 8000
     }
   );
 
@@ -1066,7 +1375,7 @@ const consultarGeminiParaRespuestaConCatalogo = async ({
         "Content-Type": "application/json",
         "x-goog-api-key": geminiApiKey
       },
-      timeout: 30000
+      timeout: 8000
     }
   );
 
@@ -1182,7 +1491,7 @@ const consultarGeminiParaRanking = async ({ consulta, items, candidatos, sugeren
         "Content-Type": "application/json",
         "x-goog-api-key": geminiApiKey
       },
-      timeout: 30000
+      timeout: 8000
     }
   );
 
@@ -1247,6 +1556,9 @@ exports.buscarInteligente = async (req, res) => {
     const consulta = (req.body?.consulta || req.query?.consulta || "").trim();
     const categoriaFiltro = (req.body?.categoria || req.query?.categoria || "").trim();
     const history = limpiarHistorialConversacion(req.body?.history || []);
+    const userContext = limpiarContextoUsuario(
+      req.body?.user_context || req.body?.userContext || {}
+    );
 
     if (!consulta) {
       return res.status(400).json({ ok: false, message: "Debes enviar una consulta" });
@@ -1265,11 +1577,60 @@ exports.buscarInteligente = async (req, res) => {
         distribucion_por_item: [],
         recomendacion_principal: null,
         alternativas: [],
-        sugerencias: []
+        sugerencias: [],
+        sugerencias_accion: crearSugerenciasAccion(userContext.rol)
       });
     }
 
     const consultaNormalizada = normalizarTexto(consulta);
+    const terminoNegocio = extraerTerminoNegocio(consulta);
+
+    if (terminoNegocio) {
+      const negociosEncontrados = await buscarNegociosPorNombre(terminoNegocio);
+
+      if (negociosEncontrados.length) {
+        return res.json({
+          ok: true,
+          modo: "negocio_info",
+          consulta,
+          items_detectados: [],
+          respuesta_chat: construirRespuestaNegocio(negociosEncontrados, terminoNegocio),
+          resumen_consulta: null,
+          resumen_ia: null,
+          distribucion_por_item: [],
+          recomendacion_principal: null,
+          alternativas: [],
+          sugerencias: [],
+          negocios_sugeridos: negociosEncontrados,
+          sugerencias_accion: [
+            { label: "Buscar producto", query: "donde venden arroz?" },
+            { label: "Como comprar?", query: "como hago una compra?" },
+            ...crearSugerenciasAccion(userContext.rol).slice(0, 3)
+          ]
+        });
+      }
+    }
+
+    const ayudaSistema = construirRespuestaAyudaSistema(consulta, userContext);
+
+    if (ayudaSistema) {
+      return res.json({
+        ok: true,
+        modo: "ayuda_sistema",
+        consulta,
+        items_detectados: [],
+        respuesta_chat: ayudaSistema.respuesta_chat,
+        resumen_consulta: null,
+        resumen_ia: null,
+        distribucion_por_item: [],
+        recomendacion_principal: null,
+        alternativas: [],
+        sugerencias: [],
+        negocios_sugeridos: [],
+        sugerencias_accion: ayudaSistema.sugerencias_accion
+      });
+    }
+
     const ultimoContexto = obtenerUltimosItemsDelHistorial(history);
     const itemsTentativos = partirConsultaEnItems(consulta);
     let interpretacionIA = null;
@@ -1281,7 +1642,8 @@ exports.buscarInteligente = async (req, res) => {
       try {
         interpretacionIA = await consultarGeminiParaIntencion({
           consulta,
-          history
+          history,
+          userContext
         });
       } catch (error) {
         console.error("ERROR INTENCION GEMINI:", error.response?.data || error.message);
@@ -1316,7 +1678,8 @@ exports.buscarInteligente = async (req, res) => {
       try {
         respuestaConversacionalIA = await consultarGeminiParaConversacion({
           consulta,
-          history
+          history,
+          userContext
         });
       } catch (error) {
         console.error("ERROR CHAT GEMINI:", error.response?.data || error.message);
@@ -1340,14 +1703,16 @@ exports.buscarInteligente = async (req, res) => {
               ? "charla"
               : SALUDOS_CONSULTA.some((saludo) => consultaNormalizada.includes(saludo))
               ? "saludo"
-              : "general"
+              : "general",
+            userContext
           }),
         resumen_consulta: null,
         resumen_ia: null,
         distribucion_por_item: [],
         recomendacion_principal: null,
         alternativas: [],
-        sugerencias: []
+        sugerencias: [],
+        sugerencias_accion: crearSugerenciasAccion(userContext.rol)
       });
     }
 
@@ -1616,7 +1981,8 @@ exports.buscarInteligente = async (req, res) => {
       distribucion_por_item: distribucionPorItem,
       recomendacion_principal: resultadosPorNegocio[0] || null,
       alternativas: resultadosPorNegocio.slice(1, 5),
-      sugerencias: sugerenciasFinales
+      sugerencias: sugerenciasFinales,
+      sugerencias_accion: crearSugerenciasAccion(userContext.rol, "catalogo")
     });
   } catch (error) {
     console.error("ERROR BUSQUEDA INTELIGENTE:", error);

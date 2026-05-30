@@ -1,4 +1,10 @@
 const db = require("../config/db");
+const {
+  asegurarCodigoOrdenSchema,
+  generarCodigoOrdenUnico,
+  normalizarIdentificadorOrden,
+  codigoPublicoOrden
+} = require("../utils/orderCodes");
 
 // ============================
 // CREAR ORDEN (CLIENTE)
@@ -22,6 +28,7 @@ const crearOrden = async (req, res) => {
   const connection = await db.getConnection();
 
   try {
+    await asegurarCodigoOrdenSchema();
     await connection.beginTransaction();
 
     // 🔥 MODIFICADO: Traemos también el costo de delivery y el ID del dueño
@@ -66,12 +73,14 @@ const crearOrden = async (req, res) => {
       total += costoDelivery;
     }
 
+    const codigoOrden = await generarCodigoOrdenUnico(connection);
+
     const [ordenResult] = await connection.query(
       `INSERT INTO ordenes
-      (usuario_id, negocio_id, total, tipo_entrega, ciudad_destino,
+      (codigo_orden, usuario_id, negocio_id, total, tipo_entrega, ciudad_destino,
        direccion_envio, estado, metodo_pago, fecha_creacion)
-      VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?, UTC_TIMESTAMP())`,
-      [usuario_id, negocio_id, total, tipo_entrega, ciudad_destino || null, direccion_envio || null, metodo_pago]
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, UTC_TIMESTAMP())`,
+      [codigoOrden, usuario_id, negocio_id, total, tipo_entrega, ciudad_destino || null, direccion_envio || null, metodo_pago]
     );
 
     const orden_id = ordenResult.insertId;
@@ -98,10 +107,11 @@ const crearOrden = async (req, res) => {
     io.to(idDueno.toString()).emit("nueva_orden", {
       message: "🔔 ¡Tienes un nuevo pedido!",
       orden_id: orden_id,
+      codigo_orden: codigoOrden,
       total: total
     });
 
-    res.json({ ok: true, message: "Orden creada correctamente", orden_id });
+    res.json({ ok: true, message: "Orden creada correctamente", orden_id, codigo_orden: codigoOrden });
 
   } catch (error) {
     await connection.rollback();
@@ -116,9 +126,10 @@ const crearOrden = async (req, res) => {
 // ============================
 const ordenesCliente = async (req, res) => {
   try {
+    await asegurarCodigoOrdenSchema();
     const usuario_id = req.user.id_usuario;
     const [rows] = await db.query(
-      `SELECT id, total, estado, DATE_FORMAT(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion
+      `SELECT id, codigo_orden, total, estado, metodo_pago, DATE_FORMAT(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion
        FROM ordenes
        WHERE usuario_id = ?
        ORDER BY fecha_creacion DESC`,
@@ -139,6 +150,7 @@ const cambiarEstado = async (req, res) => {
     const { id_orden } = req.params;
     const { estado } = req.body;
     const usuario_id = req.user.id_usuario;
+    const { codigo, idNumerico } = normalizarIdentificadorOrden(id_orden);
 
     // 🔥 Lista oficial de estados del flujo de negocio
     const estadosValidos = ["pendiente", "confirmado", "pagado", "entregado", "cancelado"];
@@ -147,18 +159,25 @@ const cambiarEstado = async (req, res) => {
       return res.status(400).json({ ok: false, message: "Estado inválido" });
     }
 
+    await asegurarCodigoOrdenSchema();
     await connection.beginTransaction();
 
     const [ordenRows] = await connection.query(
-      "SELECT o.usuario_id, o.estado AS estado_actual, n.nombre_negocio FROM ordenes o JOIN negocios n ON n.id = o.negocio_id WHERE o.id = ? AND n.usuario_id = ?", 
-      [id_orden, usuario_id]
+      `SELECT o.id, o.codigo_orden, o.usuario_id, o.estado AS estado_actual, n.nombre_negocio
+       FROM ordenes o
+       JOIN negocios n ON n.id = o.negocio_id
+       WHERE (o.codigo_orden = ? OR o.id = ?) AND n.usuario_id = ?`, 
+      [codigo, idNumerico, usuario_id]
     );
 
     if (ordenRows.length === 0) {
       throw new Error("No autorizado o la orden no existe");
     }
 
-    const estadoActual = ordenRows[0].estado_actual;
+    const orden = ordenRows[0];
+    const ordenIdInterno = orden.id;
+    const codigoOrden = codigoPublicoOrden(orden);
+    const estadoActual = orden.estado_actual;
 
     // 🛡️ SEGURIDAD: Bloquear si ya está cancelada
     if (estadoActual === "cancelado") {
@@ -176,7 +195,7 @@ const cambiarEstado = async (req, res) => {
     if (estado === "cancelado" && estadoActual !== "cancelado") {
       const [items] = await connection.query(
         "SELECT producto_id, cantidad, peso FROM detalle_orden WHERE orden_id = ?",
-        [id_orden]
+        [ordenIdInterno]
       );
 
       for (const item of items) {
@@ -189,21 +208,22 @@ const cambiarEstado = async (req, res) => {
     }
 
     // Actualizamos el estado de la orden
-    await connection.query(`UPDATE ordenes SET estado = ? WHERE id = ?`, [estado, id_orden]);
+    await connection.query(`UPDATE ordenes SET estado = ? WHERE id = ?`, [estado, ordenIdInterno]);
     await connection.commit();
 
     // 🔔 NOTIFICACIÓN SOCKET.IO: Le avisamos al cliente
     const io = req.app.get("io");
-    const idCliente = ordenRows[0].usuario_id;
-    const nombreNegocio = ordenRows[0].nombre_negocio;
+    const idCliente = orden.usuario_id;
+    const nombreNegocio = orden.nombre_negocio;
 
     io.to(idCliente.toString()).emit("estado_orden", {
       message: `Tu pedido en ${nombreNegocio} ahora está: ${estado.toUpperCase()}`,
-      orden_id: id_orden,
+      orden_id: ordenIdInterno,
+      codigo_orden: codigoOrden,
       estado: estado
     });
 
-    return res.json({ ok: true, message: `Orden marcada como ${estado}` });
+    return res.json({ ok: true, message: `Orden ${codigoOrden} marcada como ${estado}`, codigo_orden: codigoOrden });
   } catch (error) {
     await connection.rollback();
     return res.status(500).json({ ok: false, message: error.message || "Error al actualizar estado" });
@@ -217,10 +237,12 @@ const cambiarEstado = async (req, res) => {
 // ============================
 const ordenesNegocio = async (req, res) => {
   try {
+    await asegurarCodigoOrdenSchema();
     const usuario_id = req.user.id_usuario;
     // 🔥 Filtramos para que por defecto solo vea lo del mes actual
     const [rows] = await db.query(
       `SELECT o.id,
+              o.codigo_orden,
               o.usuario_id,
               o.negocio_id,
               o.total,
@@ -254,10 +276,14 @@ const detalleOrden = async (req, res) => {
   try {
     const { id_orden } = req.params;
     const user = req.user; 
+    const { codigo, idNumerico } = normalizarIdentificadorOrden(id_orden);
+
+    await asegurarCodigoOrdenSchema();
 
     // 1. Buscamos la orden con los datos del dueño del negocio
     const [ordenRows] = await db.query(
       `SELECT o.id,
+              o.codigo_orden,
               o.usuario_id,
               o.negocio_id,
               o.total,
@@ -274,8 +300,8 @@ const detalleOrden = async (req, res) => {
        FROM ordenes o
        JOIN usuarios u ON u.id = o.usuario_id
        JOIN negocios n ON n.id = o.negocio_id
-       WHERE o.id = ?`,
-      [id_orden]
+       WHERE (o.codigo_orden = ? OR o.id = ?)`,
+      [codigo, idNumerico]
     );
 
     if (!ordenRows.length) {
@@ -294,15 +320,9 @@ const detalleOrden = async (req, res) => {
     const esComprador = idComprador === userIdPeticion;
     const esAdmin = user.rol === "admin";
 
-    // En order.controller.js, dentro de detalleOrden:
-console.log("--- DEBUG SEGURIDAD ---");
-console.log("ID Usuario Token:", user?.id_usuario || user?.id);
-console.log("ID Dueño Negocio:", orden.negocio_dueno);
-console.log("Rol:", user?.rol);
-
     // Si NO es el que vende, ni el que compra, ni admin -> BLOQUEO TOTAL
     if (!esDuenoVendedor && !esComprador && !esAdmin) {
-      console.log(`⚠️ Intento de acceso no autorizado a Orden #${id_orden} por Usuario ${userIdPeticion}`);
+      console.log(`Intento de acceso no autorizado a Orden #${codigoPublicoOrden(orden)} por Usuario ${userIdPeticion}`);
       return res.status(403).json({ 
         ok: false, 
         message: "Acceso denegado: Esta orden no pertenece a tu negocio." 
@@ -315,7 +335,7 @@ console.log("Rol:", user?.rol);
        FROM detalle_orden d
        JOIN productos p ON p.id = d.producto_id
        WHERE d.orden_id = ?`,
-      [id_orden]
+      [orden.id]
     );
 
     return res.json({
@@ -337,9 +357,13 @@ const detalleOrdenNegocio = async (req, res) => {
   try {
     const { id_orden } = req.params;
     const user = req.user; 
+    const { codigo, idNumerico } = normalizarIdentificadorOrden(id_orden);
+
+    await asegurarCodigoOrdenSchema();
 
     const [ordenRows] = await db.query(
       `SELECT o.id,
+              o.codigo_orden,
               o.usuario_id,
               o.negocio_id,
               o.total,
@@ -356,8 +380,8 @@ const detalleOrdenNegocio = async (req, res) => {
        FROM ordenes o
        JOIN usuarios u ON u.id = o.usuario_id
        JOIN negocios n ON n.id = o.negocio_id
-       WHERE o.id = ?`,
-      [id_orden]
+       WHERE (o.codigo_orden = ? OR o.id = ?)`,
+      [codigo, idNumerico]
     );
 
     if (!ordenRows.length) {
@@ -370,7 +394,7 @@ const detalleOrdenNegocio = async (req, res) => {
 
     // 🔐 VALIDACIÓN ULTRA ESTRICTA: ¿Es el dueño de ESTE negocio?
     if (idDuenoNegocio !== userIdPeticion && user.rol !== "admin") {
-      console.log(`⚠️ Intento de escaneo cruzado: Usuario ${userIdPeticion} intentó ver la orden ${id_orden} del negocio ${idDuenoNegocio}`);
+      console.log(`Intento de escaneo cruzado: Usuario ${userIdPeticion} intento ver la orden ${codigoPublicoOrden(orden)} del negocio ${idDuenoNegocio}`);
       // Mandamos 403. Esto hará que el frontend pinte el mensaje de error de "No tienes permiso".
       return res.status(403).json({ 
         ok: false, 
@@ -383,7 +407,7 @@ const detalleOrdenNegocio = async (req, res) => {
        FROM detalle_orden d
        JOIN productos p ON p.id = d.producto_id
        WHERE d.orden_id = ?`,
-      [id_orden]
+      [orden.id]
     );
 
     return res.json({
@@ -406,8 +430,10 @@ const obtenerHistorialMes = async (req, res) => {
     const { mes, anio } = req.query;
     const usuario_id = req.user.id_usuario;
 
+    await asegurarCodigoOrdenSchema();
+
     const [rows] = await db.query(
-      `SELECT o.id, o.total, o.estado, DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion, u.nombre AS cliente
+      `SELECT o.id, o.codigo_orden, o.total, o.estado, DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion, u.nombre AS cliente
        FROM ordenes o
        JOIN negocios n ON n.id = o.negocio_id
        JOIN usuarios u ON u.id = o.usuario_id
