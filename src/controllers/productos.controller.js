@@ -778,6 +778,61 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     );
   }
 
+  if (contienePalabraDeGrupo(texto, ["delivery en mi negocio", "funcionar el delivery en mi negocio", "funcionar delivery en mi negocio", "activar delivery", "habilitar delivery", "configurar delivery", "delivery para mi negocio", "entrega a domicilio en mi negocio"])) {
+    if (!esNegocioOAdmin) {
+      return respuesta(
+        "El delivery lo puede activar una cuenta con rol negocio. Si quieres vender y ofrecer entregas, primero solicita abrir un negocio desde la barra lateral izquierda.",
+        [
+          { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+          { label: "Como funciona delivery?", query: "como funciona el delivery?" },
+          { label: "Como comprar?", query: "como hago una compra?" }
+        ]
+      );
+    }
+
+    return respuesta(
+      "Para hacer funcionar el delivery en tu negocio, entra a Configurar Negocio desde la barra lateral izquierda. Activa la opcion de delivery, define el costo de entrega y guarda los cambios; luego, cuando un cliente compre en tu negocio, podra elegir entrega a domicilio en el carrito.",
+      [
+        { label: "Configurar pagos", query: "como configuro PayPhone para mi negocio?" },
+        { label: "Pedidos recibidos", query: "como reviso pedidos recibidos?" },
+        { label: "Agregar productos", query: "como agrego o edito productos?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["agrego o edito productos", "agregar producto", "agrego producto", "editar producto", "edito producto", "agregar productos", "editar productos", "mis productos", "producto nuevo", "nuevo producto", "agregar uno nuevo", "crear producto", "editar uno existente"])) {
+    if (!esNegocioOAdmin) {
+      return respuesta(
+        "Agregar o editar productos es una opcion para cuentas negocio. Si quieres vender, puedes solicitar abrir un negocio desde la barra lateral izquierda.",
+        [
+          { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+          { label: "Buscar producto", query: "como busco un producto?" },
+          { label: "Como comprar?", query: "como hago una compra?" }
+        ]
+      );
+    }
+
+    if (contienePalabraDeGrupo(texto, ["editar", "edito", "existente"])) {
+      return respuesta(
+        "Para editar un producto existente, entra a Productos desde la barra lateral izquierda, busca el producto y usa la opcion de editar. Ahi puedes ajustar nombre, precio, stock, foto, categoria o datos de venta y guardar los cambios.",
+        [
+          { label: "Agregar nuevo", query: "como agrego un producto nuevo?" },
+          { label: "Inventario", query: "como manejo el inventario?" },
+          { label: "Pedidos", query: "como reviso pedidos recibidos?" }
+        ]
+      );
+    }
+
+    return respuesta(
+      "Para agregar un producto nuevo, entra a Productos desde la barra lateral izquierda y usa la opcion de crear/agregar. Completa nombre, precio, stock, unidad o tipo de venta, categoria e imagen si aplica; al guardar, el producto queda disponible en tu negocio si esta activo.",
+      [
+        { label: "Editar producto", query: "como edito un producto existente?" },
+        { label: "Configurar delivery", query: "como hago funcionar el delivery en mi negocio?" },
+        { label: "Pedidos", query: "como reviso pedidos recibidos?" }
+      ]
+    );
+  }
+
   if (contienePalabraDeGrupo(texto, ["registrarme", "registro", "como me registro", "crear cuenta", "abrir cuenta", "iniciar sesion", "login"])) {
     if (estaAutenticado) {
       return respuesta(
@@ -797,16 +852,13 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
   }
 
   if (contienePalabraDeGrupo(texto, ["metodo de pago", "metodos de pago", "como puedo pagar", "como pago", "pagar", "pago", "tarjeta", "efectivo"])) {
-    const notaNegocio = esNegocioOAdmin
-      ? " Para tu negocio, configura PayPhone desde Configurar Negocio si quieres aceptar tarjeta; los pagos en efectivo se confirman desde Cobrar Efectivo en la barra lateral izquierda."
-      : "";
-
     return respuesta(
-      `Los metodos dependen de cada negocio. En el carrito normalmente puedes pagar en efectivo y, si ese negocio tiene PayPhone configurado, tambien con tarjeta. Primero agregas productos, eliges retiro o delivery si esta disponible, y luego escoges el metodo que aparezca habilitado.${notaNegocio}`,
+      "Los metodos dependen de cada negocio. Como cliente, en el carrito veras las opciones disponibles: normalmente efectivo, y tarjeta/PayPhone si ese negocio lo tiene configurado. Primero agregas productos, eliges retiro o delivery si esta disponible, y luego escoges el metodo que aparezca habilitado.",
       [
         { label: "Que es PayPhone?", query: "que es PayPhone en la plataforma?" },
+        { label: "Configurar pagos", query: "como configuro PayPhone para mi negocio?" },
         { label: "Como compro?", query: "como hago una compra?" },
-        { label: "Delivery", query: "como funciona el delivery?" }
+        { label: "Cobrar efectivo", query: "como cobro pedidos en efectivo?" }
       ]
     );
   }
@@ -844,7 +896,7 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     );
   }
 
-  if (contienePalabraDeGrupo(texto, ["configurar mi negocio", "configuracion del negocio", "configurar negocio", "payphone para mi negocio", "delivery para mi negocio", "agregar producto", "editar producto", "inventario", "stock"])) {
+  if (contienePalabraDeGrupo(texto, ["configurar mi negocio", "configuracion del negocio", "configurar negocio", "payphone para mi negocio", "inventario", "stock"])) {
     if (!esNegocioOAdmin) {
       return respuesta(
         "Esas opciones son para cuentas con rol negocio. Si quieres vender en la plataforma, puedes enviar una solicitud desde Abrir Negocio.",
@@ -899,11 +951,11 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
 
   if (contienePalabraDeGrupo(texto, ["delivery", "envio", "domicilio", "retiro", "entrega"])) {
     return respuesta(
-      "El delivery depende de cada negocio. Si el negocio lo tiene activo, en el carrito podras elegir entrega a domicilio y se sumara el costo indicado; si no, la compra queda para retiro o el metodo disponible.",
+      "Para clientes, el delivery depende de cada negocio. Si el negocio lo tiene activo, en el carrito podras elegir entrega a domicilio y se sumara el costo indicado; si no, la compra queda para retiro o el metodo disponible.",
       [
         { label: "Como pagar?", query: "como puedo pagar?" },
         { label: "Como comprar?", query: "como hago una compra?" },
-        { label: "Buscar negocio", query: "quiero informacion de un negocio" }
+        { label: "Activar delivery", query: "como hago funcionar el delivery en mi negocio?" }
       ]
     );
   }
@@ -929,7 +981,18 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     );
   }
 
-  if (contienePalabraDeGrupo(texto, ["informacion de un negocio", "negocio especifico", "datos de un negocio", "telefono de", "ubicacion de", "horario de"])) {
+  if (contienePalabraDeGrupo(texto, ["contacto a un negocio", "contactar a un negocio", "contactar negocio", "como contacto", "telefono de", "whatsapp de", "redes de"])) {
+    return respuesta(
+      "Para contactar a un negocio, abre su perfil desde Explorar Negocios. Ahi se muestran los datos que el negocio haya registrado, como telefono, ubicacion, horarios o redes sociales; si falta un dato, depende de que el negocio lo complete en su configuracion.",
+      [
+        { label: "Info de negocio", query: "quiero informacion de un negocio" },
+        { label: "Buscar negocios", query: "como busco negocios?" },
+        { label: "Como comprar?", query: "como hago una compra?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["informacion de un negocio", "negocio especifico", "datos de un negocio", "ubicacion de", "horario de"])) {
     return respuesta(
       "Claro. Dime el nombre del negocio o entra a su perfil desde Explorar Negocios; ahi puedes ver ubicacion, telefono, horarios, redes y productos activos.",
       [
@@ -1340,7 +1403,9 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [], userCon
                 "Datos funcionales de la app:",
                 "- Clientes/visitantes: pueden explorar negocios, ver productos, registrarse, agregar productos al carrito, elegir retiro o delivery si el negocio lo ofrece, pagar en efectivo o con PayPhone/tarjeta si el negocio lo tiene configurado.",
                 "- Clientes autenticados: pueden ver Mis Compras/Mis Pedidos y solicitar abrir un negocio desde Abrir Negocio.",
-                "- Negocios: pueden ver pedidos, gestionar productos e inventario, configurar PayPhone/delivery/datos/redes, cobrar efectivo con QR y ver historial/reportes.",
+                "- Negocios: usan la barra lateral izquierda para ver pedidos, gestionar productos e inventario, configurar PayPhone/delivery/datos/redes, cobrar efectivo con QR y ver historial/reportes.",
+                "- Si el usuario pregunta por activar delivery en su negocio, indica Configurar Negocio en la barra lateral izquierda, activar delivery, definir costo y guardar.",
+                "- Si el usuario pregunta por agregar o editar productos, indica Productos en la barra lateral izquierda; para una frase de seguimiento como 'agregar uno nuevo', asumelo como producto si el historial habla de productos.",
                 "- Admin: puede revisar solicitudes, aprobar/rechazar negocios, configurar categorias/unidades y usar modulos de supervision.",
                 "Responde primero a lo que el usuario dijo, siempre dentro del alcance permitido.",
                 "Si el usuario saluda o pregunta por ti, responde corto y orientado a la plataforma.",
