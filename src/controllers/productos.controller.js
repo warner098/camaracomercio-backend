@@ -596,7 +596,7 @@ const limpiarContextoUsuario = (contexto = {}) => {
 const crearSugerenciasAccion = (rol = "visitante", contexto = "general") => {
   const comunes = [
     { label: "Como puedo pagar?", query: "como puedo pagar?" },
-    { label: "Buscar un producto", query: "donde venden arroz?" },
+    { label: "Buscar un producto", query: "como busco un producto?" },
     { label: "Como funciona delivery?", query: "como funciona el delivery?" }
   ];
 
@@ -623,7 +623,7 @@ const crearSugerenciasAccion = (rol = "visitante", contexto = "general") => {
 
   const extrasCatalogo =
     contexto === "catalogo"
-      ? [{ label: "Otra opcion", query: "dame otra opcion parecida" }]
+      ? [{ label: "Buscar otro producto", query: "como busco otro producto?" }]
       : [];
 
   return [...(porRol[rol] || porRol.visitante), ...extrasCatalogo, ...comunes].slice(0, 6);
@@ -723,7 +723,40 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     sugerencias_accion: sugerencias
   });
 
-  if (contienePalabraDeGrupo(texto, ["metodo de pago", "metodos de pago", "como puedo pagar", "como pago", "pagar", "pago", "payphone", "tarjeta", "efectivo"])) {
+  if (contienePalabraDeGrupo(texto, ["que es payphone", "payphone en la plataforma", "como funciona payphone", "payphone"])) {
+    if (esNegocioOAdmin && contienePalabraDeGrupo(texto, ["configuro", "configurar", "mi negocio", "negocio"])) {
+      return respuesta(
+        "PayPhone es la pasarela que permite a un negocio aceptar pagos con tarjeta desde la plataforma. Para activarlo, entra a Configurar Negocio y registra el Store ID de PayPhone; desde ese momento, si esta bien configurado, al cliente le aparecera la opcion de pagar online en el carrito.",
+        [
+          { label: "Metodos de pago", query: "como puedo pagar?" },
+          { label: "Cobrar efectivo", query: "como cobro pedidos en efectivo?" },
+          { label: "Delivery", query: "como funciona el delivery?" }
+        ]
+      );
+    }
+
+    return respuesta(
+      "PayPhone es el servicio de pago online que algunos negocios pueden activar para recibir pagos con tarjeta. Si el negocio lo tiene configurado, veras la opcion de pagar con PayPhone al finalizar el carrito; si no aparece, ese negocio solo tiene los metodos que muestre la app, como efectivo o retiro/entrega segun corresponda.",
+      [
+        { label: "Como pagar?", query: "como puedo pagar?" },
+        { label: "Como comprar?", query: "como hago una compra?" },
+        { label: "Delivery", query: "como funciona el delivery?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["buscar producto", "buscar un producto", "busco un producto", "busqueda de producto", "como busco un producto", "como buscar un producto", "encontrar producto", "encontrar un producto", "buscar otro producto"])) {
+    return respuesta(
+      'Para buscar un producto, escribeme algo concreto como "donde venden arroz" o "quiero comprar pan y leche". Yo reviso los negocios activos y te muestro en cual aparece, con un boton para abrir el negocio.',
+      [
+        { label: "Ver ejemplo", query: "dame un ejemplo de busqueda de producto" },
+        { label: "Buscar negocios", query: "como busco negocios?" },
+        { label: "Como comprar?", query: "como hago una compra?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["metodo de pago", "metodos de pago", "como puedo pagar", "como pago", "pagar", "pago", "tarjeta", "efectivo"])) {
     const notaNegocio = esNegocioOAdmin
       ? " Para tu negocio, configura PayPhone desde Configurar Negocio si quieres aceptar tarjeta; los pagos en efectivo se confirman con el flujo de cobro/QR."
       : "";
@@ -797,7 +830,7 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
       [
         { label: "Como pagar?", query: "como puedo pagar?" },
         { label: "Delivery", query: "como funciona el delivery?" },
-        { label: "Buscar producto", query: "donde venden arroz?" }
+        { label: "Buscar producto", query: "como busco un producto?" }
       ]
     );
   }
@@ -824,8 +857,19 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     return respuesta(
       "Claro. Dime el nombre del negocio o entra a su perfil desde Explorar Negocios; ahi puedes ver ubicacion, telefono, horarios, redes y productos activos.",
       [
-        { label: "Buscar producto", query: "donde venden arroz?" },
+        { label: "Buscar producto", query: "como busco un producto?" },
         { label: "Como contacto un negocio?", query: "como contacto a un negocio?" },
+        { label: "Como comprar?", query: "como hago una compra?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["buscar negocios", "buscar un negocio", "como busco negocios", "como buscar negocios", "explorar negocios"])) {
+    return respuesta(
+      "Para buscar negocios, usa Explorar Negocios o dime el nombre si quieres informacion de uno especifico. Tambien puedes preguntarme por un producto, por ejemplo: donde venden pan, y te dire que negocios activos lo tienen.",
+      [
+        { label: "Info de negocio", query: "quiero informacion de un negocio" },
+        { label: "Buscar producto", query: "como busco un producto?" },
         { label: "Como comprar?", query: "como hago una compra?" }
       ]
     );
@@ -1312,6 +1356,8 @@ const consultarGeminiParaRespuestaConCatalogo = async ({
                 "No inventes productos, negocios ni disponibilidad.",
                 "Si algo no se encontro, dilo con naturalidad.",
                 "Si hay una mejor opcion, menciona el negocio de forma amigable.",
+                "No digas 'hola de nuevo' ni repitas saludos si el usuario solo esta buscando un producto.",
+                "No repitas en texto todos los detalles que ya se muestran en tarjetas; la respuesta debe orientar y dejar que las tarjetas abran el negocio.",
                 historial ? `Historial reciente:\n${historial}` : "",
                 `Mensaje actual del usuario: ${consulta}`,
                 "Datos reales del catalogo:",
@@ -1603,7 +1649,7 @@ exports.buscarInteligente = async (req, res) => {
           sugerencias: [],
           negocios_sugeridos: negociosEncontrados,
           sugerencias_accion: [
-            { label: "Buscar producto", query: "donde venden arroz?" },
+            { label: "Buscar producto", query: "como busco un producto?" },
             { label: "Como comprar?", query: "como hago una compra?" },
             ...crearSugerenciasAccion(userContext.rol).slice(0, 3)
           ]
