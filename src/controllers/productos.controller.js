@@ -723,6 +723,28 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     sugerencias_accion: sugerencias
   });
 
+  if (contienePalabraDeGrupo(texto, ["cobrar efectivo", "cobro efectivo", "cobro pedidos en efectivo", "cobrar pedidos en efectivo", "como cobro pedidos", "confirmar efectivo", "escaner", "codigo qr", "qr"])) {
+    if (!esNegocioOAdmin) {
+      return respuesta(
+        "El cobro en efectivo lo realiza el negocio. Como cliente, cuando tengas un pedido activo puedes mostrar el QR desde Mis Pedidos para que el negocio confirme el pago y la entrega.",
+        [
+          { label: "Mis pedidos", query: "como reviso mis pedidos?" },
+          { label: "Como pagar?", query: "como puedo pagar?" },
+          { label: "Como comprar?", query: "como hago una compra?" }
+        ]
+      );
+    }
+
+    return respuesta(
+      "Para cobrar un pedido en efectivo, abre Cobrar Efectivo desde la barra lateral izquierda de tu panel. Escanea el QR que muestra el cliente desde Mis Pedidos; si la camara falla, escribe manualmente el codigo de la orden. Revisa el total y confirma el pago/entrega solo cuando hayas recibido el efectivo.",
+      [
+        { label: "Pedidos recibidos", query: "como reviso pedidos recibidos?" },
+        { label: "Configurar PayPhone", query: "como configuro PayPhone para mi negocio?" },
+        { label: "Reportes", query: "como reviso reportes de ventas?" }
+      ]
+    );
+  }
+
   if (contienePalabraDeGrupo(texto, ["que es payphone", "payphone en la plataforma", "como funciona payphone", "payphone"])) {
     if (esNegocioOAdmin && contienePalabraDeGrupo(texto, ["configuro", "configurar", "mi negocio", "negocio"])) {
       return respuesta(
@@ -756,9 +778,27 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     );
   }
 
+  if (contienePalabraDeGrupo(texto, ["registrarme", "registro", "como me registro", "crear cuenta", "abrir cuenta", "iniciar sesion", "login"])) {
+    if (estaAutenticado) {
+      return respuesta(
+        "Ya tienes una sesion iniciada. Desde la barra lateral izquierda puedes ir a tus opciones disponibles segun tu rol, como Mis Pedidos, Abrir Negocio o el panel si ya eres negocio.",
+        crearSugerenciasAccion(rol)
+      );
+    }
+
+    return respuesta(
+      "Para registrarte, usa el boton Ingresar y luego la opcion de registro. Completa tus datos, crea tu cuenta e inicia sesion; despues podras comprar, revisar pedidos y solicitar abrir un negocio desde la barra lateral izquierda.",
+      [
+        { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+        { label: "Como comprar?", query: "como hago una compra?" },
+        { label: "Buscar producto", query: "como busco un producto?" }
+      ]
+    );
+  }
+
   if (contienePalabraDeGrupo(texto, ["metodo de pago", "metodos de pago", "como puedo pagar", "como pago", "pagar", "pago", "tarjeta", "efectivo"])) {
     const notaNegocio = esNegocioOAdmin
-      ? " Para tu negocio, configura PayPhone desde Configurar Negocio si quieres aceptar tarjeta; los pagos en efectivo se confirman con el flujo de cobro/QR."
+      ? " Para tu negocio, configura PayPhone desde Configurar Negocio si quieres aceptar tarjeta; los pagos en efectivo se confirman desde Cobrar Efectivo en la barra lateral izquierda."
       : "";
 
     return respuesta(
@@ -774,20 +814,31 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
   if (contienePalabraDeGrupo(texto, ["ser negocio", "abrir negocio", "crear negocio", "solicitar negocio", "vender aqui", "hacerme negocio"])) {
     if (rol === "negocio" || rol === "admin") {
       return respuesta(
-        "Ya tienes acceso a las opciones de negocio. Desde el menu puedes entrar al panel, gestionar productos, configurar pagos/delivery y revisar ventas.",
+        "Ya tienes acceso a las opciones de negocio. Desde la barra lateral izquierda puedes entrar al panel, gestionar productos, configurar pagos/delivery y revisar ventas.",
         crearSugerenciasAccion(rol)
       );
     }
 
     const inicio = estaAutenticado
-      ? "En el menu lateral entra en Abrir Negocio y llena la solicitud con datos, ubicacion y categorias."
-      : "Primero debes registrarte o iniciar sesion. Luego veras la opcion Abrir Negocio en el menu lateral.";
+      ? "En la barra lateral izquierda entra en Abrir Negocio y llena la solicitud con datos, ubicacion y categorias."
+      : "Primero debes registrarte o iniciar sesion. Luego veras la opcion Abrir Negocio en la barra lateral izquierda.";
 
     return respuesta(
       `${inicio} Un administrador revisa la solicitud; si la aprueba, tu cuenta pasa a rol negocio y se habilita tu panel.`,
       [
         { label: "Que datos piden?", query: "que datos necesito para solicitar un negocio?" },
         { label: "Como comprar?", query: "como hago una compra?" },
+        { label: "Buscar negocios", query: "como busco negocios?" }
+      ]
+    );
+  }
+
+  if (contienePalabraDeGrupo(texto, ["que datos piden", "datos necesito", "datos para solicitar", "solicitud de negocio", "datos del negocio"])) {
+    return respuesta(
+      "Para solicitar un negocio normalmente debes registrar nombre del negocio, descripcion, ubicacion, telefono o contacto, categorias, logo/imagenes si aplica y datos basicos para que el administrador pueda revisar la solicitud. La solicitud se envia desde Abrir Negocio en la barra lateral izquierda.",
+      [
+        { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+        { label: "Como registrarme?", query: "como me registro?" },
         { label: "Buscar negocios", query: "como busco negocios?" }
       ]
     );
@@ -805,7 +856,7 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     }
 
     return respuesta(
-      "Como negocio puedes usar Mi Negocio para ver pedidos, Productos para crear o editar inventario, Configurar Negocio para PayPhone/delivery/datos de contacto, Historial y Reportes para ventas, y Cobrar Efectivo para escanear el QR del cliente.",
+      "Como negocio, usa la barra lateral izquierda: Mi Negocio para ver pedidos, Productos para crear o editar inventario, Configurar Negocio para PayPhone/delivery/datos de contacto, Historial y Reportes para ventas, y Cobrar Efectivo para escanear el QR del cliente.",
       crearSugerenciasAccion(rol)
     );
   }
@@ -819,14 +870,25 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     }
 
     return respuesta(
-      "Como admin puedes revisar solicitudes de negocios, aprobar o rechazar solicitudes, configurar categorias y unidades, y tambien entrar a modulos de negocio para supervisar productos, pedidos y reportes.",
+      "Como admin, usa la barra lateral izquierda para revisar solicitudes de negocios, aprobar o rechazar solicitudes, configurar categorias y unidades, y entrar a modulos de supervision como productos, pedidos y reportes.",
       crearSugerenciasAccion("admin")
     );
   }
 
-  if (contienePalabraDeGrupo(texto, ["mis pedidos", "estado de pedido", "pedido", "orden", "carrito", "como compro", "como comprar", "hacer una compra", "proceso de compra"])) {
+  if (contienePalabraDeGrupo(texto, ["mis pedidos", "estado de pedido", "pedidos recibidos", "pedido recibido", "ver pedidos", "reviso pedidos", "pedido", "orden", "carrito", "como compro", "como comprar", "hacer una compra", "proceso de compra"])) {
+    if (esNegocioOAdmin && contienePalabraDeGrupo(texto, ["pedidos recibidos", "pedido recibido", "ver pedidos", "reviso pedidos"])) {
+      return respuesta(
+        "Para revisar pedidos recibidos, entra a Mi Negocio o al panel desde la barra lateral izquierda. Ahi ves el estado, cliente, fecha, total y puedes abrir el detalle o actualizar el estado del pedido.",
+        [
+          { label: "Cobrar efectivo", query: "como cobro pedidos en efectivo?" },
+          { label: "Agregar productos", query: "como agrego o edito productos?" },
+          { label: "Reportes", query: "como reviso reportes de ventas?" }
+        ]
+      );
+    }
+
     return respuesta(
-      "Para comprar, entra a un negocio, agrega productos al carrito y luego confirma entrega y pago. Para revisar el estado, usa Mis Compras/Mis Pedidos; ahi tambien puedes ver detalles y el QR si aplica.",
+      "Para comprar, entra a un negocio, agrega productos al carrito y luego confirma entrega y pago. Para revisar el estado, usa Mis Compras/Mis Pedidos desde la barra lateral izquierda; ahi tambien puedes ver detalles y el QR si aplica.",
       [
         { label: "Como pagar?", query: "como puedo pagar?" },
         { label: "Delivery", query: "como funciona el delivery?" },
@@ -846,10 +908,24 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     );
   }
 
-  if (contienePalabraDeGrupo(texto, ["qr", "codigo qr", "escaner", "cobrar efectivo", "cobro efectivo"])) {
+  if (contienePalabraDeGrupo(texto, ["reportes de ventas", "reporte de ventas", "historial de ventas", "ventas del mes", "pdf de ventas"])) {
+    if (!esNegocioOAdmin) {
+      return respuesta(
+        "Los reportes de ventas son para cuentas negocio o admin. Si quieres vender y ver reportes, primero puedes solicitar abrir un negocio desde la barra lateral izquierda.",
+        [
+          { label: "Quiero ser negocio", query: "como puedo ser negocio?" },
+          { label: "Como comprar?", query: "como hago una compra?" }
+        ]
+      );
+    }
+
     return respuesta(
-      "El QR sirve para confirmar pagos o entregas en efectivo. El cliente puede mostrar el QR desde su pedido y el negocio lo escanea desde Cobrar Efectivo o el escaner del panel.",
-      crearSugerenciasAccion(rol)
+      "Para revisar reportes de ventas, entra a Historial y Reportes desde la barra lateral izquierda. Ahi puedes filtrar por mes, ver ventas completadas, generar PDF y guardar reportes cuando existan ingresos confirmados.",
+      [
+        { label: "Pedidos recibidos", query: "como reviso pedidos recibidos?" },
+        { label: "Cobrar efectivo", query: "como cobro pedidos en efectivo?" },
+        { label: "Productos", query: "como agrego o edito productos?" }
+      ]
     );
   }
 
