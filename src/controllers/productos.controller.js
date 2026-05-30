@@ -243,6 +243,9 @@ const esConsultaFueraDeComercio = (texto = "") => {
     "redes",
     "whatsapp",
     "telegram",
+    "store",
+    "storeid",
+    "identificador",
     "jipijapa"
   ];
 
@@ -722,6 +725,28 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     respuesta_chat: mensaje,
     sugerencias_accion: sugerencias
   });
+
+  if (contienePalabraDeGrupo(texto, ["store id", "storeid", "store", "id de payphone", "id payphone", "id de tienda", "identificador de payphone", "consigo el store", "condigo el store", "obtengo el store", "conseguir store", "obtener store"])) {
+    if (!esNegocioOAdmin) {
+      return respuesta(
+        "El Store ID de PayPhone lo necesita el negocio para activar pagos con tarjeta. Si eres cliente, no tienes que conseguirlo; solo veras PayPhone como opcion cuando el negocio ya lo haya configurado.",
+        [
+          { label: "Que es PayPhone?", query: "que es PayPhone en la plataforma?" },
+          { label: "Como pagar?", query: "como puedo pagar?" },
+          { label: "Ser negocio", query: "como puedo ser negocio?" }
+        ]
+      );
+    }
+
+    return respuesta(
+      "El Store ID se obtiene en tu cuenta/comercio de PayPhone, no lo genera esta plataforma. Entra a PayPhone con la cuenta del negocio, revisa la seccion de comercio/tienda o integraciones y copia el Store ID. Luego vuelve a la app, abre Configurar Negocio desde la barra lateral izquierda, pega ese Store ID y guarda. Si no lo encuentras, debes pedirlo al soporte o panel de PayPhone.",
+      [
+        { label: "Que es PayPhone?", query: "que es PayPhone en la plataforma?" },
+        { label: "Cobrar efectivo", query: "como cobro pedidos en efectivo?" },
+        { label: "Metodos de pago", query: "como puedo pagar?" }
+      ]
+    );
+  }
 
   if (contienePalabraDeGrupo(texto, ["cobrar efectivo", "cobro efectivo", "cobro pedidos en efectivo", "cobrar pedidos en efectivo", "como cobro pedidos", "confirmar efectivo", "escaner", "codigo qr", "qr"])) {
     if (!esNegocioOAdmin) {
