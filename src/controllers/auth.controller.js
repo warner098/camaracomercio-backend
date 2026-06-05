@@ -152,7 +152,44 @@ const login = async (req, res) => {
 };
 
 // =====================
-// SOLICITAR RECUPERACIÓN DE CONTRASEÑA
+// PERFIL ACTUAL
+// =====================
+const perfilActual = async (req, res) => {
+  try {
+    const idUsuario = req.user.id_usuario;
+
+    const [rows] = await db.query(
+      `SELECT u.id, u.nombre, u.cedula, u.rol, n.estado AS estado_negocio
+       FROM usuarios u
+       LEFT JOIN negocios n ON u.id = n.usuario_id
+       WHERE u.id = ?`,
+      [idUsuario]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ ok: false, message: "Usuario no encontrado" });
+    }
+
+    const user = rows[0];
+
+    return res.json({
+      ok: true,
+      user: {
+        id_usuario: user.id,
+        nombre: user.nombre,
+        cedula: user.cedula,
+        rol: user.rol,
+        estado_negocio: user.estado_negocio
+      }
+    });
+  } catch (error) {
+    console.error("ERROR PERFIL ACTUAL:", error);
+    return res.status(500).json({ ok: false, message: "Error de servidor" });
+  }
+};
+
+// =====================
+// SOLICITAR RECUPERACION DE CONTRASENA
 // =====================
 const solicitarRecuperacion = async (req, res) => {
   try {
@@ -243,6 +280,7 @@ const restablecerPassword = async (req, res) => {
 module.exports = {
   registro,
   login,
+  perfilActual,
   verificarCuenta,
   solicitarRecuperacion,
   restablecerPassword
