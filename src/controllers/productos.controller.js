@@ -201,6 +201,7 @@ const FRASES_CONFIRMACION_SEGUIMIENTO = [
   "si",
   "sii",
   "sip",
+  "no",
   "claro",
   "dale",
   "ok",
@@ -640,6 +641,9 @@ const esConfirmacionDeSeguimiento = (consultaNormalizada = "") => {
   );
 };
 
+const esNegacionDeSeguimiento = (consultaNormalizada = "") =>
+  ["no", "nop", "no gracias", "por ahora no"].includes(consultaNormalizada);
+
 const esConsultaDeCharla = (consultaNormalizada = "") =>
   contieneAlgunaFrase(consultaNormalizada, FRASES_CHARLA);
 
@@ -809,6 +813,17 @@ const buscarNegociosPorNombre = async (termino = "") => {
   return rows;
 };
 
+const listarCategoriasActivas = async () => {
+  const [rows] = await pool.query(
+    `SELECT nombre
+     FROM categorias
+     WHERE estado = 1
+     ORDER BY nombre ASC`
+  );
+
+  return rows.map((row) => row.nombre).filter(Boolean);
+};
+
 const construirRespuestaNegocio = (negocios = [], termino = "") => {
   if (!negocios.length) {
     return `No encontre un negocio activo que coincida con "${termino}". Prueba con parte del nombre o revisa Explorar Negocios.`;
@@ -829,7 +844,7 @@ const construirRespuestaNegocio = (negocios = [], termino = "") => {
   return `Encontre ${principal.nombre_negocio}${datos.length ? ` (${datos.join("; ")})` : ""}.${extras} Puedes abrir el negocio para ver sus productos y mas detalles.`;
 };
 
-const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
+const construirRespuestaAyudaSistema = async (consulta = "", userContext = {}) => {
   const texto = normalizarTexto(consulta);
   const rol = userContext.rol || "visitante";
   const estaAutenticado = userContext.autenticado;
@@ -839,6 +854,36 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     respuesta_chat: mensaje,
     sugerencias_accion: sugerencias
   });
+
+  const preguntaCategoriasCatalogo =
+    contienePalabraDeGrupo(texto, [
+      "que categorias hay",
+      "categorias hay",
+      "categorias de productos",
+      "categoria de productos",
+      "categorias del catalogo",
+      "categorias disponibles",
+      "tipos de productos",
+      "que productos hay",
+      "productos de ventas"
+    ]) &&
+    !contienePalabraDeGrupo(texto, ["admin", "administrador", "configurar sistema", "crear categoria", "editar categoria", "unidades"]);
+
+  if (preguntaCategoriasCatalogo) {
+    const categorias = await listarCategoriasActivas();
+    const detalle = categorias.length
+      ? `Ahora mismo puedes explorar categorias como ${unirListaNatural(categorias.slice(0, 10))}${categorias.length > 10 ? ", entre otras" : ""}.`
+      : "Ahora mismo no veo categorias activas cargadas.";
+
+    return respuesta(
+      `${detalle} Si buscas algo puntual, escribeme el producto directamente, por ejemplo: sal, aguacate o salsas.`,
+      [
+        { label: "Buscar producto", query: "sal" },
+        { label: "Ver negocios", query: "como busco negocios?" },
+        { label: "Como comprar?", query: "como hago una compra?" }
+      ]
+    );
+  }
 
   if (contienePalabraDeGrupo(texto, ["store id", "storeid", "store", "id de payphone", "id payphone", "id de tienda", "identificador de payphone", "consigo el store", "condigo el store", "obtengo el store", "conseguir store", "obtener store"])) {
     if (!esNegocioOAdmin) {
@@ -1052,7 +1097,7 @@ const construirRespuestaAyudaSistema = (consulta = "", userContext = {}) => {
     );
   }
 
-  if (contienePalabraDeGrupo(texto, ["admin", "administrador", "solicitudes", "aprobar negocios", "rechazar negocios", "configurar sistema", "categorias", "unidades"])) {
+  if (contienePalabraDeGrupo(texto, ["admin", "administrador", "solicitudes", "aprobar negocios", "rechazar negocios", "configurar sistema", "crear categoria", "editar categoria", "unidades"])) {
     if (rol !== "admin") {
       return respuesta(
         "Las opciones de administrador solo aparecen para cuentas admin. Un admin puede revisar solicitudes de negocios y ajustar categorias o unidades del sistema.",
@@ -1546,6 +1591,8 @@ const consultarGeminiParaConversacion = async ({ consulta, history = [], userCon
                 "- Si el usuario pregunta por activar delivery en su negocio, indica Configurar Negocio en la barra lateral izquierda, activar delivery, definir costo y guardar.",
                 "- Si el usuario pregunta por agregar o editar productos, indica Productos en la barra lateral izquierda; para una frase de seguimiento como 'agregar uno nuevo', asumelo como producto si el historial habla de productos.",
                 "- Admin: puede revisar solicitudes, aprobar/rechazar negocios, configurar categorias/unidades y usar modulos de supervision.",
+                "No menciones opciones de admin a usuarios que no tienen rol admin, salvo que pregunten explicitamente por administracion.",
+                "Si preguntan 'que categorias hay?' o 'categorias de productos?', habla de categorias visibles del catalogo, no de configuracion administrativa.",
                 "Responde primero a lo que el usuario dijo, siempre dentro del alcance permitido.",
                 "Si el usuario saluda o pregunta por ti, responde corto y orientado a la plataforma.",
                 "No cierres cada respuesta con frases repetidas salvo que venga al caso.",
@@ -1903,11 +1950,14 @@ exports.buscarInteligente = async (req, res) => {
     const consultaNormalizada = normalizarTexto(consulta);
     const ultimoContexto = obtenerUltimosItemsDelHistorial(history);
     const sugerenciaConfirmada = obtenerSugerenciaConfirmadaDelHistorial(history);
+    const esNegacionContextual =
+      esNegacionDeSeguimiento(consultaNormalizada) &&
+      (ultimoContexto.length > 0 || sugerenciaConfirmada.length > 0);
     const esConfirmacionContextual =
       esConfirmacionDeSeguimiento(consultaNormalizada) &&
       (ultimoContexto.length > 0 || sugerenciaConfirmada.length > 0);
 
-    if (esConsultaFueraDeComercio(consulta) && !esConfirmacionContextual) {
+    if (esConsultaFueraDeComercio(consulta) && !esConfirmacionContextual && !esNegacionContextual) {
       return res.json({
         ok: true,
         modo: "fuera_de_tema",
@@ -1953,7 +2003,7 @@ exports.buscarInteligente = async (req, res) => {
       }
     }
 
-    const ayudaSistema = construirRespuestaAyudaSistema(consulta, userContext);
+    const ayudaSistema = await construirRespuestaAyudaSistema(consulta, userContext);
 
     if (ayudaSistema) {
       return res.json({
@@ -1970,6 +2020,24 @@ exports.buscarInteligente = async (req, res) => {
         sugerencias: [],
         negocios_sugeridos: [],
         sugerencias_accion: ayudaSistema.sugerencias_accion
+      });
+    }
+
+    if (esNegacionContextual) {
+      return res.json({
+        ok: true,
+        modo: "seguimiento",
+        consulta,
+        items_detectados: [],
+        respuesta_chat: "Listo, no hay problema. Si quieres buscar otro producto o ver negocios, dime el nombre y lo reviso.",
+        resumen_consulta: null,
+        resumen_ia: null,
+        distribucion_por_item: [],
+        recomendacion_principal: null,
+        alternativas: [],
+        sugerencias: [],
+        negocios_sugeridos: [],
+        sugerencias_accion: crearSugerenciasAccion(userContext.rol, "catalogo")
       });
     }
 
@@ -1996,7 +2064,7 @@ exports.buscarInteligente = async (req, res) => {
     }
 
     const usarContextoPrevio =
-      (esSeguimientoConversacional(consultaNormalizada) || esConfirmacionContextual) &&
+      (esSeguimientoConversacional(consultaNormalizada) || (esConfirmacionContextual && !esNegacionContextual)) &&
       (ultimoContexto.length > 0 || sugerenciaConfirmada.length > 0);
     const esBusquedaPorReglas =
       usarContextoPrevio ||
