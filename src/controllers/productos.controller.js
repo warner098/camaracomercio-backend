@@ -143,6 +143,33 @@ const CORTESIAS_CONSULTA = [
   "esta bien",
   "ta bien"
 ];
+const SINONIMOS_PRODUCTOS = {
+  palta: ["aguacate"],
+  aguacate: ["palta"],
+  guineo: ["banano", "banana"],
+  banano: ["guineo", "banana"],
+  banana: ["guineo", "banano"],
+  choclo: ["maiz"],
+  maiz: ["choclo"],
+  chancho: ["cerdo", "puerco"],
+  cerdo: ["chancho", "puerco"],
+  puerco: ["chancho", "cerdo"],
+  gaseosa: ["soda", "cola", "refresco"],
+  soda: ["gaseosa", "cola", "refresco"],
+  cola: ["gaseosa", "soda", "refresco"],
+  refresco: ["gaseosa", "soda", "cola"],
+  dulce: ["golosina"],
+  golosina: ["dulce"],
+  embutido: ["salchicha", "chorizo", "mortadela", "jamon"],
+  salchicha: ["embutido"],
+  chorizo: ["embutido"],
+  mortadela: ["embutido"],
+  jamon: ["embutido"],
+  especia: ["condimento"],
+  condimento: ["especia"],
+  salsa: ["aderezo"],
+  aderezo: ["salsa"]
+};
 const FRASES_INDECISION = [
   "no se que pedir",
   "no se que mismo pedir",
@@ -169,6 +196,25 @@ const FRASES_SEGUIMIENTO = [
   "y que mas",
   "que mas",
   "y si no hay"
+];
+const FRASES_CONFIRMACION_SEGUIMIENTO = [
+  "si",
+  "sii",
+  "sip",
+  "claro",
+  "dale",
+  "ok",
+  "oki",
+  "okey",
+  "bueno",
+  "perfecto",
+  "listo",
+  "muestrame",
+  "ver",
+  "verlas",
+  "verlos",
+  "quiero ver",
+  "ensename"
 ];
 
 const normalizarTexto = (texto = "") =>
@@ -267,7 +313,11 @@ const esConsultaFueraDeComercio = (texto = "") => {
 };
 
 const singularizarToken = (token = "") => {
-  if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
+  if (token === "dulces") return "dulce";
+  if (token.length > 4 && token.endsWith("es")) {
+    const letraAntesDeEs = token[token.length - 3];
+    return "aeiou".includes(letraAntesDeEs) ? token.slice(0, -1) : token.slice(0, -2);
+  }
   if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
   return token;
 };
@@ -281,6 +331,8 @@ const tokenizar = (texto = "") =>
 const tokenizarSinStopwords = (texto = "") =>
   tokenizar(texto).filter((token) => !STOPWORDS_CONSULTA.has(token));
 
+const obtenerSinonimosProducto = (token = "") => SINONIMOS_PRODUCTOS[token] || [];
+
 const crearVariantesDeItem = (item = "") => {
   const limpio = normalizarTexto(item);
   const tokens = tokenizarSinStopwords(item);
@@ -289,7 +341,24 @@ const crearVariantesDeItem = (item = "") => {
   if (limpio) variantes.add(limpio);
   if (tokens.length) {
     variantes.add(tokens.join(" "));
-    tokens.forEach((token) => variantes.add(token));
+    tokens.forEach((token) => {
+      variantes.add(token);
+      obtenerSinonimosProducto(token).forEach((sinonimo) => variantes.add(sinonimo));
+    });
+
+    if (tokens.length <= 3) {
+      const variantesPorToken = tokens.map((token) => [token, ...obtenerSinonimosProducto(token)]);
+      const combinaciones = variantesPorToken.reduce(
+        (acumuladas, opciones) =>
+          acumuladas.flatMap((acumulada) => opciones.map((opcion) => [...acumulada, opcion])),
+        [[]]
+      );
+
+      combinaciones.forEach((combinacion) => {
+        const variante = combinacion.join(" ").trim();
+        if (variante) variantes.add(variante);
+      });
+    }
   }
 
   return Array.from(variantes);
@@ -333,6 +402,12 @@ const calcularSimilitudTokens = (tokensA = [], tokensB = []) => {
   return (precision + cobertura) / 2;
 };
 
+const contieneTodosLosTokens = (tokensBuscados = [], texto = "") => {
+  if (!tokensBuscados.length) return false;
+  const tokensTexto = tokenizar(texto);
+  return tokensBuscados.every((token) => tokensTexto.includes(token));
+};
+
 const calcularScoreProducto = (item, producto) => {
   const itemNormalizado = normalizarTexto(item);
   const itemTokens = tokenizarSinStopwords(item);
@@ -340,6 +415,7 @@ const calcularScoreProducto = (item, producto) => {
   const nombreTokens = tokenizar(producto.nombre_producto);
   const descripcionNormalizada = normalizarTexto(producto.descripcion);
   const categoriaNormalizada = normalizarTexto(producto.categoria);
+  const busquedaCorta = itemNormalizado.length <= 3 || itemTokens.some((token) => token.length <= 3);
   const blob = normalizarTexto(
     `${producto.nombre_producto} ${producto.descripcion || ""} ${producto.categoria || ""} ${producto.nombre_negocio || ""}`
   );
@@ -347,8 +423,8 @@ const calcularScoreProducto = (item, producto) => {
   let score = 0;
 
   if (nombreNormalizado === itemNormalizado) score += 120;
-  if (nombreNormalizado.includes(itemNormalizado) && itemNormalizado) score += 95;
-  if (itemNormalizado.includes(nombreNormalizado) && nombreNormalizado) score += 60;
+  if (!busquedaCorta && nombreNormalizado.includes(itemNormalizado) && itemNormalizado) score += 95;
+  if (!busquedaCorta && itemNormalizado.includes(nombreNormalizado) && nombreNormalizado) score += 60;
 
   const similitudNombre = calcularSimilitudTokens(itemTokens, nombreTokens);
   score += similitudNombre * 80;
@@ -357,15 +433,17 @@ const calcularScoreProducto = (item, producto) => {
     itemTokens.length > 0 && itemTokens.every((token) => nombreTokens.includes(token));
   if (todasLasPalabrasEnNombre) score += 35;
 
-  const todasLasPalabrasEnDescripcion =
-    itemTokens.length > 0 && itemTokens.every((token) => descripcionNormalizada.includes(token));
+  const todasLasPalabrasEnDescripcion = busquedaCorta
+    ? contieneTodosLosTokens(itemTokens, descripcionNormalizada)
+    : itemTokens.length > 0 && itemTokens.every((token) => descripcionNormalizada.includes(token));
   if (todasLasPalabrasEnDescripcion) score += 20;
 
-  const todasLasPalabrasEnCategoria =
-    itemTokens.length > 0 && itemTokens.every((token) => categoriaNormalizada.includes(token));
+  const todasLasPalabrasEnCategoria = busquedaCorta
+    ? contieneTodosLosTokens(itemTokens, categoriaNormalizada)
+    : itemTokens.length > 0 && itemTokens.every((token) => categoriaNormalizada.includes(token));
   if (todasLasPalabrasEnCategoria) score += 10;
 
-  if (blob.includes(itemNormalizado) && itemNormalizado) score += 15;
+  if (!busquedaCorta && blob.includes(itemNormalizado) && itemNormalizado) score += 15;
 
   return Number(score.toFixed(2));
 };
@@ -517,6 +595,29 @@ const obtenerUltimosItemsDelHistorial = (history = []) => {
   return [];
 };
 
+const obtenerSugerenciaConfirmadaDelHistorial = (history = []) => {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const mensaje = history[index];
+    if (mensaje?.role !== "assistant") continue;
+
+    const texto = normalizarTexto(mensaje.text || "");
+    const patrones = [
+      /opciones de ([a-z0-9\s]+?)(?:\?|\.|$)/,
+      /alternativas de ([a-z0-9\s]+?)(?:\?|\.|$)/,
+      /ver ([a-z0-9\s]+?)(?:\?|\.|$)/,
+      /buscar ([a-z0-9\s]+?)(?:\?|\.|$)/
+    ];
+
+    for (const patron of patrones) {
+      const match = texto.match(patron);
+      const termino = tokenizarSinStopwords(match?.[1] || "").join(" ").trim();
+      if (termino) return [termino];
+    }
+  }
+
+  return [];
+};
+
 const esConsultaDeCortesia = (consultaNormalizada = "") => {
   if (!consultaNormalizada) return false;
   return (
@@ -530,6 +631,14 @@ const esConsultaDeIndecision = (consultaNormalizada = "") =>
 
 const esSeguimientoConversacional = (consultaNormalizada = "") =>
   contieneAlgunaFrase(consultaNormalizada, FRASES_SEGUIMIENTO);
+
+const esConfirmacionDeSeguimiento = (consultaNormalizada = "") => {
+  if (!consultaNormalizada) return false;
+  return (
+    contieneAlgunaFrase(consultaNormalizada, FRASES_CONFIRMACION_SEGUIMIENTO) &&
+    tokenizar(consultaNormalizada).length <= 4
+  );
+};
 
 const esConsultaDeCharla = (consultaNormalizada = "") =>
   contieneAlgunaFrase(consultaNormalizada, FRASES_CHARLA);
@@ -1791,7 +1900,14 @@ exports.buscarInteligente = async (req, res) => {
       return res.status(400).json({ ok: false, message: "Debes enviar una consulta" });
     }
 
-    if (esConsultaFueraDeComercio(consulta)) {
+    const consultaNormalizada = normalizarTexto(consulta);
+    const ultimoContexto = obtenerUltimosItemsDelHistorial(history);
+    const sugerenciaConfirmada = obtenerSugerenciaConfirmadaDelHistorial(history);
+    const esConfirmacionContextual =
+      esConfirmacionDeSeguimiento(consultaNormalizada) &&
+      (ultimoContexto.length > 0 || sugerenciaConfirmada.length > 0);
+
+    if (esConsultaFueraDeComercio(consulta) && !esConfirmacionContextual) {
       return res.json({
         ok: true,
         modo: "fuera_de_tema",
@@ -1809,7 +1925,6 @@ exports.buscarInteligente = async (req, res) => {
       });
     }
 
-    const consultaNormalizada = normalizarTexto(consulta);
     const terminoNegocio = extraerTerminoNegocio(consulta);
 
     if (terminoNegocio) {
@@ -1858,7 +1973,6 @@ exports.buscarInteligente = async (req, res) => {
       });
     }
 
-    const ultimoContexto = obtenerUltimosItemsDelHistorial(history);
     const itemsTentativos = partirConsultaEnItems(consulta);
     let interpretacionIA = null;
     let respuestaConversacionalIA = null;
@@ -1882,23 +1996,23 @@ exports.buscarInteligente = async (req, res) => {
     }
 
     const usarContextoPrevio =
-      esSeguimientoConversacional(consultaNormalizada) && ultimoContexto.length > 0;
+      (esSeguimientoConversacional(consultaNormalizada) || esConfirmacionContextual) &&
+      (ultimoContexto.length > 0 || sugerenciaConfirmada.length > 0);
+    const esBusquedaPorReglas =
+      usarContextoPrevio ||
+      esBusquedaExplicita(consultaNormalizada, itemsTentativos) ||
+      esConsultaCortaDeProducto(consultaNormalizada, itemsTentativos);
 
     if (interpretacionIA?.tipo === "busqueda" && !itemsSolicitados.length && usarContextoPrevio) {
-      itemsSolicitados = ultimoContexto;
+      itemsSolicitados = sugerenciaConfirmada.length ? sugerenciaConfirmada : ultimoContexto;
     }
 
-    if (!interpretacionIA) {
-      const esBusquedaReal =
-        usarContextoPrevio ||
-        esBusquedaExplicita(consultaNormalizada, itemsTentativos) ||
-        esConsultaCortaDeProducto(consultaNormalizada, itemsTentativos);
-
-      if (usarContextoPrevio) {
-        itemsSolicitados = ultimoContexto;
-      } else if (esBusquedaReal) {
-        itemsSolicitados = itemsTentativos;
-      }
+    if ((!interpretacionIA || interpretacionIA.tipo !== "busqueda") && esBusquedaPorReglas) {
+      itemsSolicitados = usarContextoPrevio
+        ? sugerenciaConfirmada.length
+          ? sugerenciaConfirmada
+          : ultimoContexto
+        : itemsTentativos;
     }
 
     if (interpretacionIA?.tipo === "conversacion" || !itemsSolicitados.length) {
