@@ -14,36 +14,42 @@ router.get(
   productosController.listarPorNegocio
 );
 
-// SOLO NEGOCIO Y ADMIN
+// SOLO NEGOCIO
 router.get(
   "/mis-productos",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["negocio"]),
   productosController.listarMisProductos
 );
 
 router.post(
   "/",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["negocio"]),
   upload.single("foto"),
   productosController.crear
 );
 
 router.put(
   "/:id_producto",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["negocio"]),
   upload.single("foto"), 
   productosController.editar
 );
 
+router.put(
+  "/:id_producto/destacado",
+  verifyToken(["negocio"]),
+  productosController.toggleDestacado
+);
+
 router.delete(
   "/:id_producto",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["negocio"]),
   productosController.eliminar
 );
 
 router.put(
   "/:id_producto/activar",
-  verifyToken(["negocio", "admin"]),
+  verifyToken(["negocio"]),
   productosController.activar
 );
 

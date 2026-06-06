@@ -14,6 +14,15 @@ const formatNumber = (value) => {
 const formatMoney = (value) => `$${formatNumber(value)}`;
 const SQL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::\d{2})?$/;
 
+const obtenerNegocioPorUsuario = async (usuarioId) => {
+  const [rows] = await db.query(
+    "SELECT id, nombre_negocio FROM negocios WHERE usuario_id = ? LIMIT 1",
+    [usuarioId]
+  );
+
+  return rows[0] || null;
+};
+
 const parseSqlLocalDateTime = (value) => {
   if (typeof value !== 'string') return null;
   const match = value.match(SQL_DATE_TIME_PATTERN);
@@ -47,12 +56,221 @@ const formatEcuadorTime = (value) =>
     hour12: false
   }).format(new Date(value));
 
+exports.resumenMensualNegocio = async (req, res) => {
+  try {
+    const { mes, anio } = req.query;
+    const usuario_id = req.user.id_usuario;
+
+    await asegurarCodigoOrdenSchema();
+
+    const negocio = await obtenerNegocioPorUsuario(usuario_id);
+    if (!negocio) {
+      return res.status(404).json({ ok: false, message: "Negocio no encontrado" });
+    }
+
+    const params = [negocio.id, mes, anio];
+
+    const [[resumen]] = await db.query(
+      `SELECT
+         COUNT(*) AS total_ordenes,
+         SUM(CASE WHEN o.estado IN ('pagado', 'entregado') THEN 1 ELSE 0 END) AS ordenes_concretadas,
+         SUM(CASE WHEN o.estado = 'cancelado' THEN 1 ELSE 0 END) AS ordenes_canceladas,
+         COALESCE(SUM(CASE WHEN o.estado IN ('pagado', 'entregado') THEN o.total ELSE 0 END), 0) AS ingresos_confirmados,
+         COALESCE(SUM(CASE WHEN o.estado = 'pendiente' THEN o.total ELSE 0 END), 0) AS ingresos_pendientes
+       FROM ordenes o
+       WHERE o.negocio_id = ?
+         AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+         AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?`,
+      params
+    );
+
+    const [porEstado] = await db.query(
+      `SELECT o.estado, COUNT(*) AS total, COALESCE(SUM(o.total), 0) AS monto
+       FROM ordenes o
+       WHERE o.negocio_id = ?
+         AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+         AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+       GROUP BY o.estado
+       ORDER BY total DESC`,
+      params
+    );
+
+    const [porMetodo] = await db.query(
+      `SELECT o.metodo_pago, COUNT(*) AS total, COALESCE(SUM(o.total), 0) AS monto
+       FROM ordenes o
+       WHERE o.negocio_id = ?
+         AND o.estado IN ('pagado', 'entregado')
+         AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+         AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+       GROUP BY o.metodo_pago
+       ORDER BY monto DESC`,
+      params
+    );
+
+    const [porDia] = await db.query(
+      `SELECT
+         DAY(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) AS dia,
+         COUNT(*) AS ordenes,
+         COALESCE(SUM(o.total), 0) AS monto
+       FROM ordenes o
+       WHERE o.negocio_id = ?
+         AND o.estado IN ('pagado', 'entregado')
+         AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+         AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+       GROUP BY dia
+       ORDER BY dia ASC`,
+      params
+    );
+
+    const [productosTop] = await db.query(
+      `SELECT p.nombre_producto, SUM(IFNULL(d.cantidad, d.peso)) AS total_vendido, COALESCE(SUM(d.subtotal), 0) AS monto
+       FROM detalle_orden d
+       JOIN ordenes o ON d.orden_id = o.id
+       JOIN productos p ON d.producto_id = p.id
+       WHERE o.negocio_id = ?
+         AND o.estado IN ('pagado', 'entregado')
+         AND MONTH(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+         AND YEAR(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00')) = ?
+       GROUP BY p.id, p.nombre_producto
+       ORDER BY total_vendido DESC
+       LIMIT 5`,
+      params
+    );
+
+    return res.json({
+      ok: true,
+      data: {
+        negocio,
+        resumen,
+        por_estado: porEstado,
+        por_metodo: porMetodo,
+        por_dia: porDia,
+        productos_top: productosTop
+      }
+    });
+  } catch (error) {
+    console.error("ERROR RESUMEN NEGOCIO:", error);
+    return res.status(500).json({ ok: false, message: "Error al cargar resumen" });
+  }
+};
+
+exports.analiticaAdmin = async (req, res) => {
+  try {
+    await asegurarCodigoOrdenSchema();
+
+    const [[usuarios]] = await db.query(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN rol = 'cliente' THEN 1 ELSE 0 END) AS clientes,
+        SUM(CASE WHEN rol = 'negocio' THEN 1 ELSE 0 END) AS negocios,
+        SUM(CASE WHEN rol = 'admin' THEN 1 ELSE 0 END) AS admins
+      FROM usuarios
+    `);
+
+    const [[negocios]] = await db.query(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN estado = 1 THEN 1 ELSE 0 END) AS activos,
+        SUM(CASE WHEN estado = 0 THEN 1 ELSE 0 END) AS suspendidos
+      FROM negocios
+    `);
+
+    const [[productos]] = await db.query(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN estado = 1 THEN 1 ELSE 0 END) AS activos,
+        SUM(CASE WHEN estado = 0 THEN 1 ELSE 0 END) AS inactivos
+      FROM productos
+    `);
+
+    const [[ordenes]] = await db.query(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN estado IN ('pagado', 'entregado') THEN 1 ELSE 0 END) AS concretadas,
+        SUM(CASE WHEN estado = 'cancelado' THEN 1 ELSE 0 END) AS canceladas,
+        COALESCE(SUM(CASE WHEN estado IN ('pagado', 'entregado') THEN total ELSE 0 END), 0) AS valor_canalizado
+      FROM ordenes
+    `);
+
+    const [ordenesPorEstado] = await db.query(`
+      SELECT estado, COUNT(*) AS total, COALESCE(SUM(total), 0) AS monto
+      FROM ordenes
+      GROUP BY estado
+      ORDER BY total DESC
+    `);
+
+    const [metodosPago] = await db.query(`
+      SELECT metodo_pago, COUNT(*) AS total, COALESCE(SUM(total), 0) AS monto
+      FROM ordenes
+      WHERE estado IN ('pagado', 'entregado')
+      GROUP BY metodo_pago
+      ORDER BY monto DESC
+    `);
+
+    const [actividadMensual] = await db.query(`
+      SELECT
+        DATE_FORMAT(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00'), '%Y-%m') AS periodo,
+        COUNT(*) AS ordenes,
+        SUM(CASE WHEN estado IN ('pagado', 'entregado') THEN 1 ELSE 0 END) AS concretadas,
+        COALESCE(SUM(CASE WHEN estado IN ('pagado', 'entregado') THEN total ELSE 0 END), 0) AS valor_canalizado
+      FROM ordenes
+      WHERE fecha_creacion >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 MONTH)
+      GROUP BY periodo
+      ORDER BY periodo ASC
+    `);
+
+    const [topNegocios] = await db.query(`
+      SELECT
+        n.id,
+        n.nombre_negocio,
+        COUNT(o.id) AS ordenes,
+        SUM(CASE WHEN o.estado IN ('pagado', 'entregado') THEN 1 ELSE 0 END) AS concretadas,
+        COALESCE(SUM(CASE WHEN o.estado IN ('pagado', 'entregado') THEN o.total ELSE 0 END), 0) AS valor_canalizado
+      FROM negocios n
+      LEFT JOIN ordenes o ON o.negocio_id = n.id
+      GROUP BY n.id, n.nombre_negocio
+      ORDER BY ordenes DESC, valor_canalizado DESC
+      LIMIT 8
+    `);
+
+    const [solicitudes] = await db.query(`
+      SELECT estado, COUNT(*) AS total
+      FROM solicitudes_negocio
+      GROUP BY estado
+      ORDER BY total DESC
+    `);
+
+    return res.json({
+      ok: true,
+      data: {
+        usuarios,
+        negocios,
+        productos,
+        ordenes,
+        ordenes_por_estado: ordenesPorEstado,
+        metodos_pago: metodosPago,
+        actividad_mensual: actividadMensual,
+        top_negocios: topNegocios,
+        solicitudes
+      }
+    });
+  } catch (error) {
+    console.error("ERROR ANALITICA ADMIN:", error);
+    return res.status(500).json({ ok: false, message: "Error al cargar analitica" });
+  }
+};
+
 exports.generarPDF = async (req, res) => {
   try {
     const { mes, anio } = req.query;
     const usuario_id = req.user.id_usuario;
 
     await asegurarCodigoOrdenSchema();
+
+    const negocio = await obtenerNegocioPorUsuario(usuario_id);
+    if (!negocio) {
+      return res.status(404).json({ ok: false, message: "Negocio no encontrado" });
+    }
 
     // 1. Validar que existan ventas en ese mes para ese negocio (Pagadas o Entregadas)
     const [ventas] = await db.query(
@@ -97,6 +315,8 @@ exports.generarPDF = async (req, res) => {
 
     // === CABECERA ===
     doc.fontSize(20).font('Helvetica-Bold').text('Reporte de Ventas Mensual', { align: 'center' });
+    doc.fontSize(16).font('Helvetica-Bold').fillColor('#198754').text(negocio.nombre_negocio, { align: 'center' });
+    doc.fillColor('#000000');
     doc.fontSize(12).font('Helvetica').text(`Período: Mes ${mes} - Año ${anio}`, { align: 'center' });
     doc.moveDown(2);
 
@@ -209,7 +429,7 @@ exports.listarReportesGuardados = async (req, res) => {
   try {
     const usuario_id = req.user.id_usuario;
     const [rows] = await db.query(
-      `SELECT r.* FROM reportes_guardados r 
+      `SELECT r.*, n.nombre_negocio FROM reportes_guardados r 
        JOIN negocios n ON n.id = r.negocio_id 
        WHERE n.usuario_id = ? ORDER BY r.anio DESC, r.mes DESC`,
       [usuario_id]

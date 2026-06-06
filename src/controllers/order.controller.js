@@ -318,10 +318,8 @@ const detalleOrden = async (req, res) => {
 
     const esDuenoVendedor = idDuenoNegocio === userIdPeticion;
     const esComprador = idComprador === userIdPeticion;
-    const esAdmin = user.rol === "admin";
-
-    // Si NO es el que vende, ni el que compra, ni admin -> BLOQUEO TOTAL
-    if (!esDuenoVendedor && !esComprador && !esAdmin) {
+    // Si NO es el que vende ni el que compra -> BLOQUEO TOTAL
+    if (!esDuenoVendedor && !esComprador) {
       console.log(`Intento de acceso no autorizado a Orden #${codigoPublicoOrden(orden)} por Usuario ${userIdPeticion}`);
       return res.status(403).json({ 
         ok: false, 
@@ -393,7 +391,7 @@ const detalleOrdenNegocio = async (req, res) => {
     const idDuenoNegocio = Number(orden.negocio_dueno);
 
     // 🔐 VALIDACIÓN ULTRA ESTRICTA: ¿Es el dueño de ESTE negocio?
-    if (idDuenoNegocio !== userIdPeticion && user.rol !== "admin") {
+    if (idDuenoNegocio !== userIdPeticion) {
       console.log(`Intento de escaneo cruzado: Usuario ${userIdPeticion} intento ver la orden ${codigoPublicoOrden(orden)} del negocio ${idDuenoNegocio}`);
       // Mandamos 403. Esto hará que el frontend pinte el mensaje de error de "No tienes permiso".
       return res.status(403).json({ 

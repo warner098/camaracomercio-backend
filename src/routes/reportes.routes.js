@@ -3,16 +3,11 @@ const router = express.Router();
 const verifyToken = require("../middlewares/auth");
 const reportesController = require("../controllers/reportes.controller");
 
-// ✅ Obtener listado de reportes archivados en la BD
-router.get("/listado", verifyToken(["negocio", "admin"]), reportesController.listarReportesGuardados);
-
-// ✅ Generar y descargar el PDF analítico del mes
-router.get("/pdf", verifyToken(["negocio", "admin"]), reportesController.generarPDF);
-
-// ✅ Guardar el balance de un mes en la BD
-router.post("/guardar", verifyToken(["negocio", "admin"]), reportesController.guardarReporte);
-
-// ✅ Eliminar un reporte archivado de la BD
-router.delete("/eliminar/:id", verifyToken(["negocio", "admin"]), reportesController.eliminarReporte);
+router.get("/listado", verifyToken(["negocio"]), reportesController.listarReportesGuardados);
+router.get("/resumen", verifyToken(["negocio"]), reportesController.resumenMensualNegocio);
+router.get("/admin/analitica", verifyToken(["admin"]), reportesController.analiticaAdmin);
+router.get("/pdf", verifyToken(["negocio"]), reportesController.generarPDF);
+router.post("/guardar", verifyToken(["negocio"]), reportesController.guardarReporte);
+router.delete("/eliminar/:id", verifyToken(["negocio"]), reportesController.eliminarReporte);
 
 module.exports = router;

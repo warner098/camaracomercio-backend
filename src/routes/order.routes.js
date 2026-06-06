@@ -11,28 +11,14 @@ const {
 } = require("../controllers/order.controller");
 const verifyToken = require("../middlewares/auth");
 
-// ============================
-// RUTAS FIJAS (SIEMPRE PRIMERO)
-// ============================
-
-// CLIENTE
 router.post("/", verifyToken(["cliente", "negocio", "admin"]), crearOrden);
 router.get("/mis-compras", verifyToken(["cliente", "negocio", "admin"]), ordenesCliente);
 
-// NEGOCIO
-router.get("/negocio", verifyToken(["negocio", "admin"]), ordenesNegocio);
-// 🔥 Movida arriba de :id_orden para evitar el 404
-router.get("/historial", verifyToken(["negocio", "admin"]), obtenerHistorialMes);
-
-
-// ============================
-// RUTAS DINÁMICAS (AL FINAL)
-// ============================
+router.get("/negocio", verifyToken(["negocio"]), ordenesNegocio);
+router.get("/historial", verifyToken(["negocio"]), obtenerHistorialMes);
+router.get("/negocio/orden/:id_orden", verifyToken(["negocio"]), detalleOrdenNegocio);
 
 router.get("/:id_orden", verifyToken(["cliente", "negocio", "admin"]), detalleOrden);
-router.get("/negocio/orden/:id_orden", verifyToken, detalleOrdenNegocio);
-router.put("/:id_orden/estado", verifyToken(["negocio", "admin"]), cambiarEstado);
-
-
+router.put("/:id_orden/estado", verifyToken(["negocio"]), cambiarEstado);
 
 module.exports = router;

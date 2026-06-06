@@ -1,6 +1,10 @@
 const pool = require("../config/db");
 const cloudinary = require("../config/cloudinary");
 const axios = require("axios");
+const { asegurarColumna } = require("../utils/schema");
+
+const asegurarProductoDestacadoSchema = () =>
+  asegurarColumna("productos", "destacado", "TINYINT(1) NOT NULL DEFAULT 0");
 
 const STOPWORDS_CONSULTA = new Set([
   "a",
@@ -374,6 +378,7 @@ const resumirProducto = (producto, score, termino) => ({
   precio: Number(producto.precio),
   unidad_medida: producto.unidad_medida,
   foto: producto.foto,
+  destacado: Number(producto.destacado || 0),
   negocio_id: producto.negocio_id,
   nombre_negocio: producto.nombre_negocio,
   score
@@ -1737,20 +1742,28 @@ const borrarDeCloudinary = async (urlFoto) => {
 // ======================
 exports.listarTodos = async (req, res) => {
   try {
+    await asegurarProductoDestacadoSchema();
+
     // Parámetros de la URL: ?page=1&limit=10
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
     const [productos] = await pool.query(`
-      SELECT p.id, p.nombre_producto, p.descripcion, p.precio, p.stock, p.foto, p.tipo_venta, p.unidad_medida, n.nombre_negocio
+      SELECT p.id, p.nombre_producto, p.descripcion, p.precio, p.stock, p.foto, p.tipo_venta, p.unidad_medida, p.destacado, n.nombre_negocio
       FROM productos p
       JOIN negocios n ON p.negocio_id = n.id
-      WHERE p.estado = 1
+      WHERE p.estado = 1 AND n.estado = 1
+      ORDER BY p.destacado DESC, p.nombre_producto ASC
       LIMIT ? OFFSET ?
     `, [limit, offset]); 
 
-    const [[{ total }]] = await pool.query("SELECT COUNT(*) as total FROM productos WHERE estado = 1");
+    const [[{ total }]] = await pool.query(`
+      SELECT COUNT(*) as total
+      FROM productos p
+      JOIN negocios n ON p.negocio_id = n.id
+      WHERE p.estado = 1 AND n.estado = 1
+    `);
 
     return res.json({ 
       ok: true, 
@@ -1765,6 +1778,8 @@ exports.listarTodos = async (req, res) => {
 
 exports.buscarInteligente = async (req, res) => {
   try {
+    await asegurarProductoDestacadoSchema();
+
     const consulta = (req.body?.consulta || req.query?.consulta || "").trim();
     const categoriaFiltro = (req.body?.categoria || req.query?.categoria || "").trim();
     const history = limpiarHistorialConversacion(req.body?.history || []);
@@ -1939,6 +1954,7 @@ exports.buscarInteligente = async (req, res) => {
         p.foto,
         p.tipo_venta,
         p.unidad_medida,
+        p.destacado,
         n.nombre_negocio,
         n.ubicacion,
         n.logo,
@@ -1960,6 +1976,7 @@ exports.buscarInteligente = async (req, res) => {
         p.foto,
         p.tipo_venta,
         p.unidad_medida,
+        p.destacado,
         n.nombre_negocio,
         n.ubicacion,
         n.logo`
@@ -2003,7 +2020,7 @@ exports.buscarInteligente = async (req, res) => {
           return { producto, score };
         })
         .filter((match) => match.score >= 40)
-        .sort((a, b) => b.score - a.score || a.producto.precio - b.producto.precio);
+        .sort((a, b) => b.score - a.score || b.producto.destacado - a.producto.destacado || a.producto.precio - b.producto.precio);
 
       for (const match of matches) {
         const negocio = negocios.get(match.producto.negocio_id);
@@ -2207,6 +2224,8 @@ exports.buscarInteligente = async (req, res) => {
 
 exports.listarPorNegocio = async (req, res) => {
   try {
+    await asegurarProductoDestacadoSchema();
+
     const { id_negocio } = req.params;
 
     const [rows] = await pool.query(
@@ -2218,11 +2237,14 @@ exports.listarPorNegocio = async (req, res) => {
         stock,
         foto,
         tipo_venta,
-        unidad_medida
+        unidad_medida,
+        destacado
        FROM productos
        WHERE negocio_id = ? AND estado = 1`,
       [id_negocio]
     );
+
+    rows.sort((a, b) => Number(b.destacado) - Number(a.destacado) || a.nombre_producto.localeCompare(b.nombre_producto));
 
     return res.json({ ok: true, data: rows });
 
@@ -2234,6 +2256,8 @@ exports.listarPorNegocio = async (req, res) => {
 
 exports.listarMisProductos = async (req, res) => {
   try {
+    await asegurarProductoDestacadoSchema();
+
     const id_usuario = req.user.id_usuario;
 
     const [rows] = await pool.query(
@@ -2246,10 +2270,12 @@ exports.listarMisProductos = async (req, res) => {
           p.unidad_medida,
           p.stock,
           p.foto,
-          p.estado
+          p.estado,
+          p.destacado
        FROM productos p
        JOIN negocios n ON n.id = p.negocio_id
-       WHERE n.usuario_id = ?`,
+       WHERE n.usuario_id = ?
+       ORDER BY p.destacado DESC, p.estado DESC, p.nombre_producto ASC`,
       [id_usuario]
     );
 
@@ -2266,6 +2292,8 @@ exports.listarMisProductos = async (req, res) => {
 // ======================
 exports.crear = async (req, res) => {
   try {
+    await asegurarProductoDestacadoSchema();
+
     const id_usuario = req.user.id_usuario;
 
     const {
@@ -2274,7 +2302,8 @@ exports.crear = async (req, res) => {
       tipo_venta,
       precio,
       unidad_medida,
-      stock
+      stock,
+      destacado
     } = req.body;
 
     const foto = req.file?.path || null;
@@ -2295,8 +2324,8 @@ exports.crear = async (req, res) => {
 
     const [result] = await pool.query(
       `INSERT INTO productos
-        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto, estado)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto, destacado, estado)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       [
         negocio_id,
         nombre_producto,
@@ -2305,7 +2334,8 @@ exports.crear = async (req, res) => {
         precio,
         unidad_medida,
         stock || 0,
-        foto
+        foto,
+        destacado === "1" || destacado === "true" || destacado === true ? 1 : 0
       ]
     );
 
@@ -2329,6 +2359,8 @@ exports.crear = async (req, res) => {
 // ======================
 exports.editar = async (req, res) => {
   try {
+    await asegurarProductoDestacadoSchema();
+
     const { id_producto } = req.params;
     const id_usuario = req.user.id_usuario;
 
@@ -2338,7 +2370,8 @@ exports.editar = async (req, res) => {
       tipo_venta,
       precio,
       unidad_medida,
-      stock
+      stock,
+      destacado
     } = req.body;
 
     const foto = req.file?.path;
@@ -2360,7 +2393,8 @@ exports.editar = async (req, res) => {
         p.tipo_venta = ?,
         p.precio = ?,
         p.unidad_medida = ?,
-        p.stock = ?
+        p.stock = ?,
+        p.destacado = ?
     `;
 
     const params = [
@@ -2369,7 +2403,8 @@ exports.editar = async (req, res) => {
       tipo_venta,
       precio,
       unidad_medida,
-      stock
+      stock,
+      destacado === "1" || destacado === "true" || destacado === true ? 1 : 0
     ];
 
     if (foto) {
@@ -2400,6 +2435,46 @@ exports.editar = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al editar producto"
+    });
+  }
+};
+
+// ======================
+// DESTACAR / QUITAR DESTACADO
+// ======================
+exports.toggleDestacado = async (req, res) => {
+  try {
+    await asegurarProductoDestacadoSchema();
+
+    const { id_producto } = req.params;
+    const { destacado } = req.body;
+    const id_usuario = req.user.id_usuario;
+    const nuevoDestacado = destacado === 1 || destacado === "1" || destacado === true;
+
+    const [result] = await pool.query(
+      `UPDATE productos p
+       JOIN negocios n ON n.id = p.negocio_id
+       SET p.destacado = ?
+       WHERE p.id = ? AND n.usuario_id = ?`,
+      [nuevoDestacado ? 1 : 0, id_producto, id_usuario]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(403).json({
+        ok: false,
+        message: "No autorizado o el producto no existe"
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: nuevoDestacado ? "Producto destacado" : "Producto sin destacado"
+    });
+  } catch (error) {
+    console.error("ERROR DESTACAR PRODUCTO:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al actualizar destacado"
     });
   }
 };

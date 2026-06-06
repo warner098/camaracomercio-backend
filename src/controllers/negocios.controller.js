@@ -1,10 +1,16 @@
 const db = require("../config/db");
+const { asegurarColumna } = require("../utils/schema");
+
+const asegurarNegocioDestacadoSchema = () =>
+  asegurarColumna("negocios", "destacado", "TINYINT(1) NOT NULL DEFAULT 0");
 
 // ======================
 // LISTAR NEGOCIOS (PÚBLICO)
 // ======================
 exports.listar = async (req, res) => {
   try {
+    await asegurarNegocioDestacadoSchema();
+
     // Usamos GROUP_CONCAT para unir los nombres de las categorías de la tabla intermedia
     const [rows] = await db.query(
       `SELECT 
@@ -12,6 +18,7 @@ exports.listar = async (req, res) => {
         n.nombre_negocio, 
         n.descripcion, 
         n.usuario_id,
+        n.destacado,
         GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria, 
         n.logo, 
         n.banner, 
@@ -20,7 +27,8 @@ exports.listar = async (req, res) => {
       LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
       LEFT JOIN categorias c ON nc.categoria_id = c.id_categoria
       WHERE n.estado = 1
-      GROUP BY n.id`
+      GROUP BY n.id
+      ORDER BY n.destacado DESC, n.fecha_creacion DESC`
     );
 
     return res.json({ ok: true, data: rows });
@@ -35,6 +43,8 @@ exports.listar = async (req, res) => {
 // ======================
 exports.detalle = async (req, res) => {
   try {
+    await asegurarNegocioDestacadoSchema();
+
     const { id_negocio } = req.params;
 
     const [rows] = await db.query(
@@ -91,6 +101,8 @@ exports.crear = async (req, res) => {
 // ======================
 exports.miNegocio = async (req, res) => {
   try {
+    await asegurarNegocioDestacadoSchema();
+
     const usuario_id = req.user.id_usuario;
 
     const [negociosRows] = await db.query(
@@ -271,18 +283,20 @@ exports.actualizarImagenes = async (req, res) => {
 // ======================
 exports.listarAdmin = async (req, res) => {
   try {
+    await asegurarNegocioDestacadoSchema();
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
     const [rows] = await db.query(`
-      SELECT n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado, u.nombre AS dueno_nombre, u.correo AS dueno_correo, GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
+      SELECT n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado, n.destacado, u.nombre AS dueno_nombre, u.correo AS dueno_correo, GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
       FROM negocios n
       LEFT JOIN usuarios u ON n.usuario_id = u.id
       LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
       LEFT JOIN categorias c ON nc.categoria_id = c.id_categoria
       GROUP BY n.id
-      ORDER BY n.fecha_creacion DESC
+      ORDER BY n.destacado DESC, n.fecha_creacion DESC
       LIMIT ? OFFSET ?
     `, [limit, offset]);
 
@@ -320,5 +334,35 @@ exports.toggleEstadoAdmin = async (req, res) => {
   } catch (error) {
     console.error("ERROR TOGGLE ESTADO NEGOCIO:", error);
     return res.status(500).json({ ok: false, message: "Error al cambiar estado del negocio" });
+  }
+};
+
+// ======================
+// PANEL ADMIN: CAMBIAR DESTACADO DE NEGOCIO
+// ======================
+exports.toggleDestacadoAdmin = async (req, res) => {
+  try {
+    await asegurarNegocioDestacadoSchema();
+
+    const { id_negocio } = req.params;
+    const { destacado } = req.body;
+    const nuevoDestacado = destacado === 1 || destacado === "1" || destacado === true;
+
+    const [result] = await db.query(
+      "UPDATE negocios SET destacado = ? WHERE id = ?",
+      [nuevoDestacado ? 1 : 0, id_negocio]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ ok: false, message: "Negocio no encontrado" });
+    }
+
+    return res.json({
+      ok: true,
+      message: nuevoDestacado ? "Negocio destacado correctamente" : "Negocio quitado de destacados"
+    });
+  } catch (error) {
+    console.error("ERROR DESTACADO NEGOCIO:", error);
+    return res.status(500).json({ ok: false, message: "Error al cambiar destacado del negocio" });
   }
 };
