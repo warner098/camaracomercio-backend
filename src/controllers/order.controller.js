@@ -129,10 +129,17 @@ const ordenesCliente = async (req, res) => {
     await asegurarCodigoOrdenSchema();
     const usuario_id = req.user.id_usuario;
     const [rows] = await db.query(
-      `SELECT id, codigo_orden, total, estado, metodo_pago, DATE_FORMAT(CONVERT_TZ(fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion
-       FROM ordenes
-       WHERE usuario_id = ?
-       ORDER BY fecha_creacion DESC`,
+      `SELECT o.id,
+              o.codigo_orden,
+              o.total,
+              o.estado,
+              o.metodo_pago,
+              n.nombre_negocio AS negocio_nombre,
+              DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion
+       FROM ordenes o
+       JOIN negocios n ON n.id = o.negocio_id
+       WHERE o.usuario_id = ?
+       ORDER BY o.fecha_creacion DESC`,
       [usuario_id]
     );
     return res.json({ ok: true, data: rows });
