@@ -45,6 +45,25 @@ const asegurarColumna = async (tableName, columnName, columnDefinition) => {
   return columnChecks.get(key);
 };
 
+const asegurarCamposNegocioServicios = async () => {
+  await asegurarColumna("negocios", "tipo_negocio", "ENUM('productos', 'servicios', 'mixto') NOT NULL DEFAULT 'productos'");
+  await asegurarColumna("negocios", "latitud", "DECIMAL(10,8) NULL");
+  await asegurarColumna("negocios", "longitud", "DECIMAL(11,8) NULL");
+};
+
+const asegurarCamposProductoServicios = async () => {
+  await asegurarColumna("productos", "tipo_oferta", "ENUM('producto', 'servicio') NOT NULL DEFAULT 'producto'");
+  await asegurarColumna("productos", "modalidad_cobro", "ENUM('unidad', 'medida', 'por_hora', 'contrato', 'fijo') NOT NULL DEFAULT 'unidad'");
+};
+
+const asegurarCamposPedidoUbicacion = async () => {
+  await asegurarColumna("ordenes", "latitud_destino", "DECIMAL(10,8) NULL");
+  await asegurarColumna("ordenes", "longitud_destino", "DECIMAL(11,8) NULL");
+};
+
 module.exports = {
-  asegurarColumna
+  asegurarColumna,
+  asegurarCamposNegocioServicios,
+  asegurarCamposProductoServicios,
+  asegurarCamposPedidoUbicacion
 };

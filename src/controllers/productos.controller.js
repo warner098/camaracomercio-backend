@@ -1,10 +1,12 @@
 const pool = require("../config/db");
 const cloudinary = require("../config/cloudinary");
 const axios = require("axios");
-const { asegurarColumna } = require("../utils/schema");
+const { asegurarColumna, asegurarCamposProductoServicios } = require("../utils/schema");
 
-const asegurarProductoDestacadoSchema = () =>
-  asegurarColumna("productos", "destacado", "TINYINT(1) NOT NULL DEFAULT 0");
+const asegurarProductoDestacadoSchema = async () => {
+  await asegurarColumna("productos", "destacado", "TINYINT(1) NOT NULL DEFAULT 0");
+  await asegurarCamposProductoServicios();
+};
 
 const STOPWORDS_CONSULTA = new Set([
   "a",
@@ -2420,7 +2422,9 @@ exports.listarPorNegocio = async (req, res) => {
         foto,
         tipo_venta,
         unidad_medida,
-        destacado
+        destacado,
+        tipo_oferta,
+        modalidad_cobro
        FROM productos
        WHERE negocio_id = ? AND estado = 1`,
       [id_negocio]
@@ -2453,7 +2457,9 @@ exports.listarMisProductos = async (req, res) => {
           p.stock,
           p.foto,
           p.estado,
-          p.destacado
+          p.destacado,
+          p.tipo_oferta,
+          p.modalidad_cobro
        FROM productos p
        JOIN negocios n ON n.id = p.negocio_id
        WHERE n.usuario_id = ?
@@ -2485,7 +2491,9 @@ exports.crear = async (req, res) => {
       precio,
       unidad_medida,
       stock,
-      destacado
+      destacado,
+      tipo_oferta,
+      modalidad_cobro
     } = req.body;
 
     const foto = req.file?.path || null;
@@ -2506,8 +2514,8 @@ exports.crear = async (req, res) => {
 
     const [result] = await pool.query(
       `INSERT INTO productos
-        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto, destacado, estado)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        (negocio_id, nombre_producto, descripcion, tipo_venta, precio, unidad_medida, stock, foto, destacado, estado, tipo_oferta, modalidad_cobro)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       [
         negocio_id,
         nombre_producto,
@@ -2517,7 +2525,9 @@ exports.crear = async (req, res) => {
         unidad_medida,
         stock || 0,
         foto,
-        destacado === "1" || destacado === "true" || destacado === true ? 1 : 0
+        destacado === "1" || destacado === "true" || destacado === true ? 1 : 0,
+        tipo_oferta || 'producto',
+        modalidad_cobro || 'unidad'
       ]
     );
 
@@ -2553,7 +2563,9 @@ exports.editar = async (req, res) => {
       precio,
       unidad_medida,
       stock,
-      destacado
+      destacado,
+      tipo_oferta,
+      modalidad_cobro
     } = req.body;
 
     const foto = req.file?.path;
@@ -2576,7 +2588,9 @@ exports.editar = async (req, res) => {
         p.precio = ?,
         p.unidad_medida = ?,
         p.stock = ?,
-        p.destacado = ?
+        p.destacado = ?,
+        p.tipo_oferta = ?,
+        p.modalidad_cobro = ?
     `;
 
     const params = [
@@ -2586,13 +2600,10 @@ exports.editar = async (req, res) => {
       precio,
       unidad_medida,
       stock,
-      destacado === "1" || destacado === "true" || destacado === true ? 1 : 0
+      destacado === "1" || destacado === "true" || destacado === true ? 1 : 0,
+      tipo_oferta || 'producto',
+      modalidad_cobro || 'unidad'
     ];
-
-    if (foto) {
-      query += `, p.foto = ?`;
-      params.push(foto);
-    }
 
     query += ` WHERE p.id = ? AND n.usuario_id = ?`;
 

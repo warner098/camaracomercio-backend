@@ -22,13 +22,13 @@ const io = new Server(server, {
 // 3. Guardamos la instancia de 'io' en app para poder usarla en cualquier controlador
 app.set("io", io);
 
+
 // 4. Lógica de conexión en tiempo real
 io.on("connection", (socket) => {
   console.log("🟢 Nuevo dispositivo conectado:", socket.id);
 
-  // Cuando un usuario hace login, lo unimos a una "sala" invisible con su ID
-  // Así podemos mandarle alertas directas solo a él (como dueño o como cliente)
   socket.on("unirse_sala", (id_usuario) => {
+    if (!id_usuario) return;
     socket.join(id_usuario.toString());
     console.log(`👤 Usuario ${id_usuario} se unió a su canal de notificaciones`);
   });

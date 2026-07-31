@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { asegurarCamposPedidoUbicacion } = require("../utils/schema");
 const {
   asegurarCodigoOrdenSchema,
   generarCodigoOrdenUnico,
@@ -18,7 +19,9 @@ const crearOrden = async (req, res) => {
     ciudad_destino,
     direccion_envio,
     metodo_pago,
-    items
+    items,
+    latitud_destino,
+    longitud_destino
   } = req.body;
 
   if (!negocio_id || !tipo_entrega || !metodo_pago || !items || !items.length) {
@@ -29,6 +32,7 @@ const crearOrden = async (req, res) => {
 
   try {
     await asegurarCodigoOrdenSchema();
+    await asegurarCamposPedidoUbicacion();
     await connection.beginTransaction();
 
     // 🔥 MODIFICADO: Traemos también el costo de delivery y el ID del dueño
@@ -78,9 +82,9 @@ const crearOrden = async (req, res) => {
     const [ordenResult] = await connection.query(
       `INSERT INTO ordenes
       (codigo_orden, usuario_id, negocio_id, total, tipo_entrega, ciudad_destino,
-       direccion_envio, estado, metodo_pago, fecha_creacion)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, UTC_TIMESTAMP())`,
-      [codigoOrden, usuario_id, negocio_id, total, tipo_entrega, ciudad_destino || null, direccion_envio || null, metodo_pago]
+       direccion_envio, estado, metodo_pago, fecha_creacion, latitud_destino, longitud_destino)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, UTC_TIMESTAMP(), ?, ?)`,
+      [codigoOrden, usuario_id, negocio_id, total, tipo_entrega, ciudad_destino || null, direccion_envio || null, metodo_pago, latitud_destino || null, longitud_destino || null]
     );
 
     const orden_id = ordenResult.insertId;
@@ -101,7 +105,6 @@ const crearOrden = async (req, res) => {
 
     await connection.commit();
 
-    // 🔔 NOTIFICACIÓN SOCKET.IO: Le avisamos al dueño del negocio
     const io = req.app.get("io");
     const idDueno = negocioRows[0].usuario_id;
     io.to(idDueno.toString()).emit("nueva_orden", {
@@ -112,7 +115,6 @@ const crearOrden = async (req, res) => {
     });
 
     res.json({ ok: true, message: "Orden creada correctamente", orden_id, codigo_orden: codigoOrden });
-
   } catch (error) {
     await connection.rollback();
     res.status(500).json({ ok: false, message: error.message });
@@ -256,6 +258,8 @@ const ordenesNegocio = async (req, res) => {
               o.tipo_entrega,
               o.ciudad_destino,
               o.direccion_envio,
+              o.latitud_destino,
+              o.longitud_destino,
               o.estado,
               o.metodo_pago,
               DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion,
@@ -297,6 +301,8 @@ const detalleOrden = async (req, res) => {
               o.tipo_entrega,
               o.ciudad_destino,
               o.direccion_envio,
+              o.latitud_destino,
+              o.longitud_destino,
               o.estado,
               o.metodo_pago,
               DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion,
@@ -375,6 +381,8 @@ const detalleOrdenNegocio = async (req, res) => {
               o.tipo_entrega,
               o.ciudad_destino,
               o.direccion_envio,
+              o.latitud_destino,
+              o.longitud_destino,
               o.estado,
               o.metodo_pago,
               DATE_FORMAT(CONVERT_TZ(o.fecha_creacion, '+00:00', '-05:00'), '%Y-%m-%d %H:%i:%s') AS fecha_creacion,
@@ -408,7 +416,7 @@ const detalleOrdenNegocio = async (req, res) => {
     }
 
     const [detalle] = await db.query(
-      `SELECT d.*, p.nombre_producto
+      `SELECT d.*, p.nombre_producto, p.foto
        FROM detalle_orden d
        JOIN productos p ON p.id = d.producto_id
        WHERE d.orden_id = ?`,

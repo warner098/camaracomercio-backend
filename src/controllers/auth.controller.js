@@ -221,8 +221,7 @@ const solicitarRecuperacion = async (req, res) => {
     await enviarRecuperacion(email, link)
       .then(() => console.log("Correo de recuperación enviado"))
       .catch(err => console.error("Error enviando correo:", err));
-
-    return res.json({
+    return res.json({
       ok: true,
       message: "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
     });
@@ -277,11 +276,67 @@ const restablecerPassword = async (req, res) => {
   }
 };
 
+// =====================
+// ACTUALIZAR PERFIL DE USUARIO
+// =====================
+const actualizarPerfil = async (req, res) => {
+  try {
+    const id_usuario = req.user.id_usuario;
+    const { nombre, correo, contrasenaNueva } = req.body;
+
+    if (!nombre || !correo) {
+      return res.status(400).json({ ok: false, message: "El nombre y el correo son obligatorios." });
+    }
+
+    // Verificar si el nuevo correo ya pertenece a otro usuario
+    const [existeCorreo] = await db.query(
+      "SELECT id FROM usuarios WHERE correo = ? AND id != ?",
+      [correo.trim(), id_usuario]
+    );
+
+    if (existeCorreo.length > 0) {
+      return res.status(400).json({ ok: false, message: "El correo ingresado ya está registrado por otra cuenta." });
+    }
+
+    if (contrasenaNueva && contrasenaNueva.trim().length > 0) {
+      if (contrasenaNueva.trim().length < 6) {
+        return res.status(400).json({ ok: false, message: "La nueva contraseña debe tener al menos 6 caracteres." });
+      }
+      const hash = await bcrypt.hash(contrasenaNueva.trim(), 10);
+      await db.query(
+        "UPDATE usuarios SET nombre = ?, correo = ?, contrasena = ? WHERE id = ?",
+        [nombre.trim(), correo.trim(), hash, id_usuario]
+      );
+    } else {
+      await db.query(
+        "UPDATE usuarios SET nombre = ?, correo = ? WHERE id = ?",
+        [nombre.trim(), correo.trim(), id_usuario]
+      );
+    }
+
+    const [userUpdated] = await db.query(
+      "SELECT id AS id_usuario, nombre, cedula, correo, rol FROM usuarios WHERE id = ?",
+      [id_usuario]
+    );
+
+    return res.json({
+      ok: true,
+      message: "Perfil actualizado correctamente",
+      user: userUpdated[0]
+    });
+
+  } catch (error) {
+    console.error("ERROR ACTUALIZAR PERFIL:", error);
+    return res.status(500).json({ ok: false, message: "Error al actualizar el perfil" });
+  }
+};
+
 module.exports = {
   registro,
   login,
   perfilActual,
   verificarCuenta,
   solicitarRecuperacion,
-  restablecerPassword
+  restablecerPassword,
+  actualizarPerfil
 };

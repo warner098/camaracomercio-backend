@@ -1,8 +1,10 @@
 const db = require("../config/db");
-const { asegurarColumna } = require("../utils/schema");
+const { asegurarColumna, asegurarCamposNegocioServicios } = require("../utils/schema");
 
-const asegurarNegocioDestacadoSchema = () =>
-  asegurarColumna("negocios", "destacado", "TINYINT(1) NOT NULL DEFAULT 0");
+const asegurarNegocioDestacadoSchema = async () => {
+  await asegurarColumna("negocios", "destacado", "TINYINT(1) NOT NULL DEFAULT 0");
+  await asegurarCamposNegocioServicios();
+};
 
 // ======================
 // LISTAR NEGOCIOS (PÚBLICO)
@@ -11,7 +13,6 @@ exports.listar = async (req, res) => {
   try {
     await asegurarNegocioDestacadoSchema();
 
-    // Usamos GROUP_CONCAT para unir los nombres de las categorías de la tabla intermedia
     const [rows] = await db.query(
       `SELECT 
         n.id, 
@@ -19,6 +20,9 @@ exports.listar = async (req, res) => {
         n.descripcion, 
         n.usuario_id,
         n.destacado,
+        n.tipo_negocio,
+        n.latitud,
+        n.longitud,
         GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria, 
         n.logo, 
         n.banner, 
@@ -76,7 +80,7 @@ exports.detalle = async (req, res) => {
 exports.crear = async (req, res) => {
   try {
     const id_usuario = req.user.id_usuario;
-    const { nombre, descripcion, direccion, telefono } = req.body;
+    const { nombre, descripcion, direccion, telefono, tipo_negocio, latitud, longitud } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ ok: false, message: "Nombre requerido" });
@@ -84,9 +88,9 @@ exports.crear = async (req, res) => {
 
     await db.query(
       `INSERT INTO negocios
-       (nombre_negocio, descripcion, ubicacion, telefono, usuario_id, estado)
-       VALUES (?, ?, ?, ?, ?, 1)`,
-      [nombre, descripcion || null, direccion || null, telefono || null, id_usuario]
+       (nombre_negocio, descripcion, ubicacion, telefono, usuario_id, estado, tipo_negocio, latitud, longitud)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+      [nombre, descripcion || null, direccion || null, telefono || null, id_usuario, tipo_negocio || 'productos', latitud || null, longitud || null]
     );
 
     return res.status(201).json({ ok: true, message: "Negocio creado correctamente" });
@@ -116,7 +120,6 @@ exports.miNegocio = async (req, res) => {
 
     const negocio = negociosRows[0];
 
-    // Buscamos sus categorías asignadas para devolver el arreglo de IDs
     const [catRows] = await db.query(
       `SELECT categoria_id FROM negocio_categorias WHERE negocio_id = ?`,
       [negocio.id]
@@ -136,6 +139,8 @@ exports.miNegocio = async (req, res) => {
 // ======================
 exports.editar = async (req, res) => {
   try {
+    await asegurarNegocioDestacadoSchema();
+
     const { id_negocio } = req.params;
     const id_usuario = req.user.id_usuario;
     
@@ -143,7 +148,8 @@ exports.editar = async (req, res) => {
       nombre_negocio, descripcion, ubicacion, telefono, 
       email_contacto, horarios, facebook, instagram,
       tiktok, x_twitter, youtube, whatsapp, telegram,
-      payphone_id, ofrece_delivery, costo_delivery, categorias // 🔥 Agregado ofrece_delivery
+      payphone_id, ofrece_delivery, costo_delivery, categorias,
+      tipo_negocio, latitud, longitud
     } = req.body;
 
     let query = `
@@ -152,7 +158,8 @@ exports.editar = async (req, res) => {
         nombre_negocio = ?, descripcion = ?, ubicacion = ?, telefono = ?,
         email_contacto = ?, horarios = ?, facebook = ?, instagram = ?,
         tiktok = ?, x_twitter = ?, youtube = ?, whatsapp = ?, telegram = ?,
-        payphone_id = ?, ofrece_delivery = ?, costo_delivery = ?
+        payphone_id = ?, ofrece_delivery = ?, costo_delivery = ?,
+        tipo_negocio = ?, latitud = ?, longitud = ?
       WHERE id = ? AND usuario_id = ?
     `;
 
@@ -161,8 +168,11 @@ exports.editar = async (req, res) => {
       email_contacto || null, horarios || null, facebook || null, instagram || null, 
       tiktok || null, x_twitter || null, youtube || null, whatsapp || null, telegram || null,
       payphone_id || null, 
-      ofrece_delivery ? 1 : 0, // 🔥 Guardamos 1 o 0
+      ofrece_delivery ? 1 : 0,
       costo_delivery || 0,
+      tipo_negocio || 'productos',
+      latitud || null,
+      longitud || null,
       id_negocio, id_usuario
     ];
 
@@ -290,7 +300,7 @@ exports.listarAdmin = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const [rows] = await db.query(`
-      SELECT n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado, n.destacado, u.nombre AS dueno_nombre, u.correo AS dueno_correo, GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
+      SELECT n.id, n.nombre_negocio, n.ubicacion, n.telefono, n.estado, n.destacado, n.tipo_negocio, u.nombre AS dueno_nombre, u.correo AS dueno_correo, GROUP_CONCAT(c.nombre SEPARATOR ', ') AS categoria
       FROM negocios n
       LEFT JOIN usuarios u ON n.usuario_id = u.id
       LEFT JOIN negocio_categorias nc ON n.id = nc.negocio_id
